@@ -6,11 +6,10 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolu
 import numpy as np
 
 # Título do App
-st.title("P&L ARTEFACT")
+st.title("P&L - ARTEFACT")
 
 # Subtítulo do App
 st.subheader("Análise preditiva de P&L utilizando modelo de previsão Prophet")
-
 
 # Upload do arquivo via Drag-and-Drop
 uploaded_file = st.file_uploader("Arraste e solte a base de dados aqui", type=["csv", "xlsx", "xls"])
@@ -92,7 +91,7 @@ if uploaded_file:
                     y=forecast_data["y"],
                     mode='lines+markers',
                     name="Histórico",
-                    line=dict(color='blue', width=2)
+                    line=dict(color='blue', width=1)
                 ))
 
                 # Linha de previsão (yhat)
@@ -110,7 +109,7 @@ if uploaded_file:
                     y=forecast["yhat_upper"],
                     mode='lines',
                     name="Limite Superior (yhat_upper)",
-                    line=dict(color='red', width=1, dash='dash')
+                    line=dict(color='orange', width=1, dash='dash')
                 ))
 
                 # Linha inferior (yhat_lower)
@@ -140,12 +139,15 @@ if uploaded_file:
                 # Seleciona os dados históricos como "valores reais"
                 historical_data = forecast_data[forecast_data['ds'] < pd.to_datetime("today")]
 
-                if not historical_data.empty:
+                # Garante que forecast tem dados para o histórico
+                forecast_historical = forecast[forecast['ds'] < pd.to_datetime("today")]
+
+                if not historical_data.empty and not forecast_historical.empty:
                     # Calcular as métricas de acurácia
-                    mae = mean_absolute_error(historical_data['y'], forecast.loc[forecast['ds'].isin(historical_data['ds']), 'yhat'])
-                    mse = mean_squared_error(historical_data['y'], forecast.loc[forecast['ds'].isin(historical_data['ds']), 'yhat'])
+                    mae = mean_absolute_error(historical_data['y'], forecast_historical['yhat'])
+                    mse = mean_squared_error(historical_data['y'], forecast_historical['yhat'])
                     rmse = np.sqrt(mse)
-                    mape = mean_absolute_percentage_error(historical_data['y'], forecast.loc[forecast['ds'].isin(historical_data['ds']), 'yhat'])
+                    mape = mean_absolute_percentage_error(historical_data['y'], forecast_historical['yhat'])
 
                     # Exibir as métricas
                     st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
