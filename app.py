@@ -15,6 +15,7 @@ uploaded_file = st.file_uploader("Arraste e solte a base de dados aqui", type=["
 
 if uploaded_file:
     try:
+        # Carregamento do arquivo
         if uploaded_file.name.endswith('.csv'):
             data = pd.read_csv(uploaded_file)
         elif uploaded_file.name.endswith(('.xlsx', '.xls')):
@@ -23,7 +24,7 @@ if uploaded_file:
             st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
             st.stop()
 
-        # Mostra os dados carregados
+        # Exibição inicial dos dados
         st.subheader("Dados Carregados (Apenas 10 Primeiras Linhas):")
         st.dataframe(data.head(10))
 
@@ -33,6 +34,7 @@ if uploaded_file:
         value_column = st.selectbox("Selecione a coluna de valores:", data.columns)
 
         if date_column and value_column:
+            # Prepara os dados
             forecast_data = data[[date_column, value_column]].rename(
                 columns={date_column: "ds", value_column: "y"}
             )
@@ -42,10 +44,10 @@ if uploaded_file:
             model = Prophet()
             model.fit(forecast_data)
 
-            # Identificar o último mês com dados históricos
+            # Última data com valor
             last_date = forecast_data['ds'].max()
 
-            # Input do usuário para o número de meses de forecast
+            # Configuração do forecast
             forecast_months = st.slider(
                 "Selecione quantos meses à frente deseja prever:",
                 min_value=1,
@@ -54,11 +56,11 @@ if uploaded_file:
                 step=1
             )
 
-            # Geração do forecast a partir do mês seguinte ao último mês registrado
+            # Gerar dados futuros
             future = model.make_future_dataframe(periods=forecast_months, freq="M")
             forecast = model.predict(future)
 
-            # Separar valores históricos e previsões
+            # Combinação de dados históricos e previsão
             forecast['y'] = forecast['ds'].map(
                 dict(zip(forecast_data['ds'], forecast_data['y']))
             )
@@ -69,16 +71,16 @@ if uploaded_file:
                 lambda row: row['y'] if row['type'] == 'Histórico' else row['yhat'], axis=1
             )
 
-            # Cálculo do MAPE (Mean Absolute Percentage Error) para os dados históricos
+            # Cálculo do MAPE para os dados históricos
             historical_values = forecast_data.merge(forecast[['ds', 'yhat']], on='ds', how='inner')
             mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
             st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
 
-            # Exibição do resultado com a coluna extra
+            # Exibição da tabela completa
             st.subheader("Tabela do Forecast com Histórico e Forecast")
             st.dataframe(forecast[["ds", "y", "yhat", "yhat_lower", "yhat_upper", "type"]])
 
-            # Criação do gráfico
+            # Gráfico principal com Upper e Lower
             fig = go.Figure()
 
             # Linha de dados históricos
@@ -93,10 +95,28 @@ if uploaded_file:
             # Linha de previsão (yhat)
             fig.add_trace(go.Scatter(
                 x=forecast[forecast['type'] == 'Forecast']["ds"],
-                y=forecast[forecast['type'] == 'Forecast']["y"],
+                y=forecast[forecast['type'] == 'Forecast']["yhat"],
                 mode='lines+markers',
                 name="Previsão (yhat)",
                 line=dict(color='green', width=2)
+            ))
+
+            # Linha superior (yhat_upper)
+            fig.add_trace(go.Scatter(
+                x=forecast[forecast['type'] == 'Forecast']["ds"],
+                y=forecast[forecast['type'] == 'Forecast']["yhat_upper"],
+                mode='lines',
+                name="Limite Superior (yhat_upper)",
+                line=dict(color='orange', width=1, dash='dash')
+            ))
+
+            # Linha inferior (yhat_lower)
+            fig.add_trace(go.Scatter(
+                x=forecast[forecast['type'] == 'Forecast']["ds"],
+                y=forecast[forecast['type'] == 'Forecast']["yhat_lower"],
+                mode='lines',
+                name="Limite Inferior (yhat_lower)",
+                line=dict(color='red', width=1, dash='dash')
             ))
 
             # Configuração do layout do gráfico
@@ -109,6 +129,27 @@ if uploaded_file:
             )
 
             st.plotly_chart(fig)
+
+            # Exibição de tabela colorida com valores de forecast
+            st.subheader("Tabela de Forecast (Valores Previstos)")
+            forecast_only = forecast[forecast['type'] == 'Forecast'][["ds", "yhat", "yhat_lower", "yhat_upper"]]
+            forecast_only.columns = ["Data", "Previsão (Yhat)", "Limite Inferior (Yhat Lower)", "Limite Superior (Yhat Upper)"]
+
+            # Estilizando a tabela
+            def color_forecast(val):
+                if val.name == "Previsão (Yhat)":
+                    return ['background-color: lightgreen' for _ in val]
+                elif val.name == "Limite Inferior (Yhat Lower)":
+                    return ['background-color: lightcoral' for _ in val]
+                elif val.name == "Limite Superior (Yhat Upper)":
+                    return ['background-color: lightblue' for _ in val]
+                return ['' for _ in val]
+
+            st.dataframe(
+                forecast_only.style.apply(color_forecast, axis=0).format(
+                    {"Previsão (Yhat)": "{:.2f}", "Limite Inferior (Yhat Lower)": "{:.2f}", "Limite Superior (Yhat Upper)": "{:.2f}"}
+                )
+            )
 
         else:
             st.warning("Selecione as colunas de data e valores para continuar.")
