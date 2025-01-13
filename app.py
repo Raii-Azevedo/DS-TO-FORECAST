@@ -77,23 +77,8 @@ if uploaded_file:
                     lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
                 )
 
-                # Cálculo do MAPE (Mean Absolute Percentage Error)
-                if len(forecast_data) > 1:
-                    # Considerando os dados mais recentes (último mês registrado) para o cálculo
-                    historical_values = forecast_data.tail(forecast_months)
-                    historical_values = historical_values.merge(forecast[['ds', 'yhat']], on='ds', how='left')
-
-                    # Verifica se a previsão (yhat) foi gerada corretamente antes de calcular o MAPE
-                    if not historical_values['yhat'].isnull().any():
-                        mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
-                        st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
-                    else:
-                        st.warning("Não foi possível calcular o MAPE devido à falta de previsões para os dados históricos.")
-
-                # Comparação de acuracidade (opcional)
+                # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
                 historical_forecast = forecast[forecast["type"] == "Histórico"]
-
-                # Certifique-se de que há valores históricos suficientes para comparar
                 if not historical_forecast.empty:
                     historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
                     
