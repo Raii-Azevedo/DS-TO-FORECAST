@@ -5,6 +5,22 @@ import plotly.graph_objects as go
 from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
 import numpy as np
 
+# Função para ler os arquivos com tratamento de erros
+def read_file(uploaded_file):
+    try:
+        # Verifica o tipo de arquivo e lê os dados
+        if uploaded_file.name.endswith('.csv'):
+            data = pd.read_csv(uploaded_file)
+        elif uploaded_file.name.endswith(('.xlsx', '.xls')):  # Suporte a arquivos Excel
+            data = pd.read_excel(uploaded_file)
+        else:
+            st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
+            return None  # Retorna None em caso de erro
+        return data
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao ler o arquivo: {e}")
+        return None
+
 # Título do App
 st.title("P&L - ARTEFACT")
 
@@ -15,16 +31,10 @@ st.subheader("Análise preditiva de P&L utilizando modelo de previsão Prophet")
 uploaded_file = st.file_uploader("Arraste e solte a base de dados aqui", type=["csv", "xlsx", "xls"])
 
 if uploaded_file:
-    # Verifica o tipo de arquivo e lê os dados
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            data = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith(('.xlsx', '.xls')):  # Suporte a arquivos Excel
-            data = pd.read_excel(uploaded_file)
-        else:
-            st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
-            st.stop()
+    # Lê o arquivo
+    data = read_file(uploaded_file)
 
+    if data is not None:
         # Mostra os dados carregados
         st.subheader("Dados Carregados (Apenas 10 Primeiras Linhas):")
         st.dataframe(data.head(10))
@@ -195,29 +205,32 @@ if uploaded_file:
             # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
             try:
                 historical_forecast = forecast[forecast["type"] == "Histórico"]
+                
+                # Verificar se o número de registros históricos é suficiente
                 st.write(f"Número de registros históricos: {len(historical_forecast)}")
                 
                 if len(historical_forecast) >= len(forecast_data):
-                    historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
+                    historical_forecast = historical_forecast.tail(len(forecast_data))  # Ajustar para o histórico correto
                     st.write(f"Número de registros após ajuste: {len(historical_forecast)}")
                     
-                    # Cálculo das métricas de erro
-                    mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
-                    mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
-                    rmse = np.sqrt(mse)
-                    mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
+                    # Verifique se a coluna 'y' existe no DataFrame histórico
+                    if 'y' not in historical_forecast.columns:
+                        st.error("A coluna 'y' não foi encontrada nos dados históricos.")
+                    else:
+                        # Cálculo das métricas de erro
+                        mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
+                        mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
+                        rmse = np.sqrt(mse)
+                        mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
 
-                    st.subheader("Métricas de Acuracidade:")
-                    st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
-                    st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
-                    st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
-                    st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
+                        st.subheader("Métricas de Acuracidade:")
+                        st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
+                        st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
+                        st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
+                        st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
                 else:
                     st.warning("Não há dados históricos suficientes para calcular as métricas de erro.")
             except KeyError as e:
                 st.error(f"Erro com as colunas: {e}")
             except Exception as e:
                 st.error(f"Ocorreu um erro durante o cálculo das métricas: {e}")
-
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao carregar o arquivo ou processar os dados: {e}")
