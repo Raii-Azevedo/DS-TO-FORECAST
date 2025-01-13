@@ -127,5 +127,5 @@ O código utiliza:
 
 ---
 
-## Contato
-Caso tenha dúvidas, entre em contato com [seu_email@exemplo.com].
+## Author
+Raíssa Azevedo
