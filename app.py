@@ -77,6 +77,14 @@ if uploaded_file:
                     lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
                 )
 
+                # Cálculo do MAPE (Mean Absolute Percentage Error)
+                if len(forecast_data) > 1:
+                    # Considerando os dados mais recentes (último mês registrado) para o cálculo
+                    historical_values = forecast_data.tail(forecast_months)
+                    historical_values = historical_values.merge(forecast[['ds', 'yhat']], on='ds', how='left')
+                    mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
+                    st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
+
                 # Exibição do resultado com a coluna extra
                 st.subheader(f"Tabela do Forecast com Histórico e Forecast")
                 st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper", "type"]])
@@ -195,14 +203,6 @@ if uploaded_file:
 
             else:
                 st.warning("Selecione as colunas de data e valores para continuar.")
-
-            # Cálculo do MAPE (Mean Absolute Percentage Error)
-                if len(forecast_data) > 1:
-                    # Considerando os dados mais recentes (último mês registrado) para o cálculo
-                    historical_values = forecast_data.tail(forecast_months)
-                    historical_values = historical_values.merge(forecast[['ds', 'yhat']], on='ds', how='left')
-                    mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
-                    st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
 
         except Exception as e:
             st.error(f"Ocorreu um erro: {e}")
