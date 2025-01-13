@@ -117,6 +117,68 @@ if uploaded_file:
             # Exibir gráfico
             st.plotly_chart(fig)
 
+            # Filtrar apenas os dados de Forecast
+            forecast_only = forecast[forecast['ds'] > forecast_data['ds'].max()]
+
+            # Exibir uma tabela estilizada com os valores de Forecast
+            st.subheader("Tabela de Forecast (Valores Previstos)")
+            forecast_table = forecast_only[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+            forecast_table.columns = ["Data", "Previsão (Yhat)", "Limite Inferior (Yhat Lower)", "Limite Superior (Yhat Upper)"]
+
+            # Estilizando a tabela com cores
+            def color_forecast(val):
+                if val.name == "Previsão (Yhat)":
+                    return ['background-color: lightgreen' for _ in val]
+                elif val.name == "Limite Inferior (Yhat Lower)":
+                    return ['background-color: lightcoral' for _ in val]
+                elif val.name == "Limite Superior (Yhat Upper)":
+                    return ['background-color: lightblue' for _ in val]
+                return ['' for _ in val]
+
+            st.dataframe(
+                forecast_table.style.apply(color_forecast, axis=0).format(
+                    {"Previsão (Yhat)": "{:.2f}", "Limite Inferior (Yhat Lower)": "{:.2f}", "Limite Superior (Yhat Upper)": "{:.2f}"}
+                )
+            )
+
+            # Exibir um gráfico adicional para os Forecasts
+            st.subheader("Gráfico de Valores de Forecast")
+            forecast_fig = go.Figure()
+
+            # Adicionar as barras para Yhat, Yhat Lower e Yhat Upper
+            forecast_fig.add_trace(go.Bar(
+                x=forecast_only["ds"],
+                y=forecast_only["yhat"],
+                name="Previsão (Yhat)",
+                marker_color='lightgreen'
+            ))
+
+            forecast_fig.add_trace(go.Bar(
+                x=forecast_only["ds"],
+                y=forecast_only["yhat_lower"],
+                name="Limite Inferior (Yhat Lower)",
+                marker_color='lightcoral'
+            ))
+
+            forecast_fig.add_trace(go.Bar(
+                x=forecast_only["ds"],
+                y=forecast_only["yhat_upper"],
+                name="Limite Superior (Yhat Upper)",
+                marker_color='lightblue'
+            ))
+
+            # Configuração do layout do gráfico
+            forecast_fig.update_layout(
+                title="Valores de Forecast",
+                xaxis_title="Data",
+                yaxis_title="Valor",
+                barmode="group",
+                template="plotly_white"
+            )
+
+            st.plotly_chart(forecast_fig)
+
+
             # Comparação de acuracidade (opcional)
             st.subheader("Métricas de Acuracidade:")
             mae = mean_absolute_error(data["y"], model.predict(data)["yhat"])
