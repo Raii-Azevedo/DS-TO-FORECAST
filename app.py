@@ -19,7 +19,7 @@ if uploaded_file:
     try:
         if uploaded_file.name.endswith('.csv'):
             data = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith(('.xlsx', '.xls')): 
+        elif uploaded_file.name.endswith(('.xlsx', '.xls')):
             data = pd.read_excel(uploaded_file)
         else:
             st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
@@ -35,16 +35,34 @@ if uploaded_file:
             date_column = st.selectbox("Selecione a coluna de data:", data.columns)
             value_column = st.selectbox("Selecione a coluna de valores:", data.columns)
 
+            # Filtro para escolher o número de linhas históricas
+            num_history = st.slider(
+                "Selecione o número de registros históricos a exibir:",
+                min_value=10,
+                max_value=len(data),
+                value=30,
+                step=1
+            )
+
+            # Processa os dados apenas se ambas as colunas forem selecionadas
             if date_column and value_column:
                 # Renomeia as colunas para o formato esperado pelo Prophet
                 forecast_data = data[[date_column, value_column]].rename(
                     columns={date_column: "ds", value_column: "y"}
                 )
-                forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format='%d/%m/%Y')
+                forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format="%d/%m/%Y")
+
+                # Seleciona apenas o número de registros históricos solicitado
+                forecast_data = forecast_data.tail(num_history)
 
                 # Criação do modelo Prophet
                 model = Prophet()
                 model.fit(forecast_data)
+
+                # Identificar o último mês com dados históricos
+                last_date = forecast_data['ds'].max()
+                next_month = last_date + pd.DateOffset(months=1)
+                next_month_first_day = pd.to_datetime(f"{next_month.year}-{next_month.month}-01")
 
                 # Input do usuário para o número de meses de forecast
                 forecast_months = st.slider(
@@ -55,14 +73,22 @@ if uploaded_file:
                     step=1
                 )
 
-                # Geração do forecast
+                # Geração do forecast a partir do mês seguinte ao último mês registrado
                 future = model.make_future_dataframe(periods=forecast_months, freq="M")
                 forecast = model.predict(future)
 
-                # Adicionar coluna indicando se é histórico ou forecast
+                # Ajusta a coluna 'type' para indicar se é Histórico ou Forecast
                 forecast['type'] = forecast['ds'].apply(
-                    lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
+                    lambda x: 'Histórico' if x <= last_date else 'Forecast'
                 )
+
+                # Cálculo do MAPE (Mean Absolute Percentage Error)
+                if len(forecast_data) > 1:
+                    # Considerando os dados mais recentes (último mês registrado) para o cálculo
+                    historical_values = forecast_data.tail(forecast_months)
+                    historical_values = historical_values.merge(forecast[['ds', 'yhat']], on='ds', how='left')
+                    mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
+                    st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
 
                 # Exibição do resultado com a coluna extra
                 st.subheader(f"Tabela do Forecast com Histórico e Forecast")
@@ -71,13 +97,13 @@ if uploaded_file:
                 # Criação do gráfico
                 fig = go.Figure()
 
-                # Linha de dados históricos com marcadores
+                # Linha de dados históricos
                 fig.add_trace(go.Scatter(
                     x=forecast_data["ds"],
                     y=forecast_data["y"],
-                    mode='lines+markers',  # Marcadores para o histórico
+                    mode='lines+markers',
                     name="Histórico",
-                    line=dict(color='blue', width=2)
+                    line=dict(color='blue', width=1)
                 ))
 
                 # Linha de previsão (yhat)
@@ -118,6 +144,67 @@ if uploaded_file:
 
                 # Exibir o gráfico no Streamlit
                 st.plotly_chart(fig)
+
+                # Filtrar apenas os dados de Forecast (a partir do último mês histórico)
+                forecast_only = forecast[forecast['ds'] > last_date]
+
+                # Exibir uma tabela estilizada com os valores de Forecast
+                st.subheader("Tabela de Forecast (Valores Previstos)")
+                forecast_table = forecast_only[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+                forecast_table.columns = ["Data", "Previsão (Yhat)", "Limite Inferior (Yhat Lower)", "Limite Superior (Yhat Upper)"]
+
+                # Estilizando a tabela com cores
+                def color_forecast(val):
+                    if val.name == "Previsão (Yhat)":
+                        return ['background-color: lightgreen' for _ in val]
+                    elif val.name == "Limite Inferior (Yhat Lower)":
+                        return ['background-color: lightcoral' for _ in val]
+                    elif val.name == "Limite Superior (Yhat Upper)":
+                        return ['background-color: lightblue' for _ in val]
+                    return ['' for _ in val]
+
+                st.dataframe(
+                    forecast_table.style.apply(color_forecast, axis=0).format(
+                        {"Previsão (Yhat)": "{:.2f}", "Limite Inferior (Yhat Lower)": "{:.2f}", "Limite Superior (Yhat Upper)": "{:.2f}"}
+                    )
+                )
+
+                # Exibir um gráfico adicional para os Forecasts
+                st.subheader("Gráfico de Valores de Forecast")
+                forecast_fig = go.Figure()
+
+                # Adicionar as barras para Yhat, Yhat Lower e Yhat Upper
+                forecast_fig.add_trace(go.Bar(
+                    x=forecast_only["ds"],
+                    y=forecast_only["yhat"],
+                    name="Previsão (Yhat)",
+                    marker_color='lightgreen'
+                ))
+
+                forecast_fig.add_trace(go.Bar(
+                    x=forecast_only["ds"],
+                    y=forecast_only["yhat_lower"],
+                    name="Limite Inferior (Yhat Lower)",
+                    marker_color='lightcoral'
+                ))
+
+                forecast_fig.add_trace(go.Bar(
+                    x=forecast_only["ds"],
+                    y=forecast_only["yhat_upper"],
+                    name="Limite Superior (Yhat Upper)",
+                    marker_color='lightblue'
+                ))
+
+                # Configuração do layout do gráfico
+                forecast_fig.update_layout(
+                    title="Valores de Forecast",
+                    xaxis_title="Data",
+                    yaxis_title="Valor",
+                    barmode="group",
+                    template="plotly_white"
+                )
+
+                st.plotly_chart(forecast_fig)
 
             else:
                 st.warning("Selecione as colunas de data e valores para continuar.")
