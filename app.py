@@ -74,7 +74,7 @@ if uploaded_file:
 
                 # Adicionar coluna indicando se é histórico ou forecast
                 forecast['type'] = forecast['ds'].apply(
-                    lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
+                    lambda x: 'Histórico' if x <= forecast_data['ds'].max() else 'Forecast'
                 )
 
                 # Cálculo do MAPE (Mean Absolute Percentage Error)
