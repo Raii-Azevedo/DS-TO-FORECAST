@@ -35,25 +35,17 @@ if uploaded_file:
             date_column = st.selectbox("Selecione a coluna de data:", data.columns)
             value_column = st.selectbox("Selecione a coluna de valores:", data.columns)
 
-            # Filtro para escolher o número de linhas históricas
-            num_history = st.slider(
-                "Selecione o número de registros históricos a exibir:",
-                min_value=10,
-                max_value=len(data),
-                value=30,
-                step=1
-            )
-
             # Processa os dados apenas se ambas as colunas forem selecionadas
             if date_column and value_column:
                 # Renomeia as colunas para o formato esperado pelo Prophet
                 forecast_data = data[[date_column, value_column]].rename(
                     columns={date_column: "ds", value_column: "y"}
                 )
-                forecast_data["ds"] = pd.to_datetime(forecast_data["ds"])
+                forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format='%d/%m/%Y')
 
-                # Seleciona apenas o número de registros históricos solicitado
-                forecast_data = forecast_data.tail(num_history)
+                # Usamos todo o histórico, então não há necessidade de filtrar
+                # Não aplicamos mais o filtro de "num_history"
+                # forecast_data = forecast_data.tail(num_history)
 
                 # Criação do modelo Prophet
                 model = Prophet()
@@ -74,7 +66,7 @@ if uploaded_file:
 
                 # Adicionar coluna indicando se é histórico ou forecast
                 forecast['type'] = forecast['ds'].apply(
-                    lambda x: 'Histórico' if x <= forecast_data['ds'].max() else 'Forecast'
+                    lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
                 )
 
                 # Cálculo do MAPE (Mean Absolute Percentage Error)
@@ -92,13 +84,13 @@ if uploaded_file:
                 # Criação do gráfico
                 fig = go.Figure()
 
-                # Linha de dados históricos
+                # Linha de dados históricos (agora uma linha contínua)
                 fig.add_trace(go.Scatter(
                     x=forecast_data["ds"],
                     y=forecast_data["y"],
-                    mode='lines+markers',
+                    mode='lines',  # Garantindo que seja uma linha contínua
                     name="Histórico",
-                    line=dict(color='blue', width=1)
+                    line=dict(color='blue', width=2)  # Linha azul contínua
                 ))
 
                 # Linha de previsão (yhat)
@@ -140,7 +132,7 @@ if uploaded_file:
                 # Exibir o gráfico no Streamlit
                 st.plotly_chart(fig)
 
-                # Filtrar apenas os dados de Forecast (a partir do último mês histórico)
+                # Filtrar apenas os dados de Forecast
                 forecast_only = forecast[forecast['ds'] > forecast_data['ds'].max()]
 
                 # Exibir uma tabela estilizada com os valores de Forecast
