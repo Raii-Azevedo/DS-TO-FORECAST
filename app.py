@@ -19,7 +19,7 @@ if uploaded_file:
     try:
         if uploaded_file.name.endswith('.csv'):
             data = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith(('.xlsx', '.xls')):
+        elif uploaded_file.name.endswith(('.xlsx', '.xls')): 
             data = pd.read_excel(uploaded_file)
         else:
             st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
@@ -35,15 +35,6 @@ if uploaded_file:
             date_column = st.selectbox("Selecione a coluna de data:", data.columns)
             value_column = st.selectbox("Selecione a coluna de valores:", data.columns)
 
-            # Filtro para escolher o número de linhas históricas
-            num_history = st.slider(
-                "Selecione o número de registros históricos a exibir:",
-                min_value=10,
-                max_value=len(data),
-                value=30,
-                step=1
-            )
-
             # Processa os dados apenas se ambas as colunas forem selecionadas
             if date_column and value_column:
                 # Renomeia as colunas para o formato esperado pelo Prophet
@@ -51,9 +42,6 @@ if uploaded_file:
                     columns={date_column: "ds", value_column: "y"}
                 )
                 forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format="%d/%m/%Y")
-
-                # Seleciona apenas o número de registros históricos solicitado
-                forecast_data = forecast_data.tail(num_history)
 
                 # Criação do modelo Prophet
                 model = Prophet()
