@@ -58,18 +58,15 @@ if uploaded_file:
             future = model.make_future_dataframe(periods=forecast_months, freq="M")
             forecast = model.predict(future)
 
-            # Combina os dados históricos e previsões
-            forecast = pd.merge(
-                future,
-                forecast_data[['ds', 'y']],
-                on='ds',
-                how='left'
+            # Separar valores históricos e previsões
+            forecast['y'] = forecast['ds'].map(
+                dict(zip(forecast_data['ds'], forecast_data['y']))
             )
-
-            # Ajusta os valores de histórico e previsão
-            forecast['y'] = forecast['y'].fillna(forecast['yhat'])
             forecast['type'] = forecast['ds'].apply(
                 lambda x: 'Histórico' if x <= last_date else 'Forecast'
+            )
+            forecast['y'] = forecast.apply(
+                lambda row: row['y'] if row['type'] == 'Histórico' else row['yhat'], axis=1
             )
 
             # Cálculo do MAPE (Mean Absolute Percentage Error) para os dados históricos
@@ -90,14 +87,14 @@ if uploaded_file:
                 y=forecast[forecast['type'] == 'Histórico']["y"],
                 mode='lines',
                 name="Histórico",
-                line=dict(color='blue', width=1)
+                line=dict(color='blue', width=2)
             ))
 
             # Linha de previsão (yhat)
             fig.add_trace(go.Scatter(
                 x=forecast[forecast['type'] == 'Forecast']["ds"],
                 y=forecast[forecast['type'] == 'Forecast']["y"],
-                mode='lines',
+                mode='lines+markers',
                 name="Previsão (yhat)",
                 line=dict(color='green', width=2)
             ))
