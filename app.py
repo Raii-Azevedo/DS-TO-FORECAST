@@ -77,23 +77,6 @@ if uploaded_file:
                     lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
                 )
 
-                # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
-                historical_forecast = forecast[forecast["type"] == "Histórico"]
-                if not historical_forecast.empty:
-                    historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
-                    
-                    # Cálculo das métricas de erro
-                    mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
-                    mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
-                    rmse = np.sqrt(mse)
-                    mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
-
-                    st.subheader("Métricas de Acuracidade:")
-                    st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
-                    st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
-                    st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
-                    st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
-
                 # Exibição do resultado com a coluna extra
                 st.subheader(f"Tabela do Forecast com Histórico e Forecast")
                 st.dataframe(forecast[["ds", "yhat_lower", "yhat", "yhat_upper", "type"]])
@@ -209,6 +192,25 @@ if uploaded_file:
                 )
 
                 st.plotly_chart(forecast_fig)
+
+                # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
+                historical_forecast = forecast[forecast["type"] == "Histórico"]
+                if len(historical_forecast) >= len(forecast_data):
+                    historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
+                    
+                    # Cálculo das métricas de erro
+                    mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
+                    mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
+                    rmse = np.sqrt(mse)
+                    mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
+
+                    st.subheader("Métricas de Acuracidade:")
+                    st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
+                    st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
+                    st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
+                    st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
+                else:
+                    st.warning("Não há dados históricos suficientes para calcular as métricas de erro.")
 
             else:
                 st.warning("Selecione as colunas de data e valores para continuar.")
