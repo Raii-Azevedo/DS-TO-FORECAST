@@ -24,11 +24,12 @@ if uploaded_file:
         else:
             st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
             st.stop()
+
     except Exception as e:
         st.error(f"Ocorreu um erro ao processar o arquivo: {e}")
-        st.stop()  # Para a execução aqui caso haja erro no arquivo
+        st.stop()
 
-    # Exibição dos dados carregados
+    # Mostra os dados carregados
     st.subheader("Dados Carregados (Apenas 10 Primeiras Linhas):")
     st.dataframe(data.head(10))
 
@@ -53,11 +54,15 @@ if uploaded_file:
             columns={date_column: "ds", value_column: "y"}
         )
 
+        # Verificação das colunas após renomeação
+        st.write(f"Colunas após renomeação: {forecast_data.columns}")
+
         # Verifica se a coluna 'y' está presente
         if 'y' not in forecast_data.columns:
             st.error("A coluna 'y' não foi encontrada nos dados históricos. Verifique o nome da coluna de valores.")
             st.stop()
 
+        # Converte a coluna de data para o formato adequado
         forecast_data["ds"] = pd.to_datetime(forecast_data["ds"])
 
         # Seleciona apenas o número de registros históricos solicitado
@@ -204,14 +209,14 @@ if uploaded_file:
         # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
         try:
             historical_forecast = forecast[forecast["type"] == "Histórico"]
-
+            
             # Verificar se o número de registros históricos é suficiente
             st.write(f"Número de registros históricos: {len(historical_forecast)}")
-
+            
             if len(historical_forecast) >= len(forecast_data):
                 historical_forecast = historical_forecast.tail(len(forecast_data))  # Ajustar para o histórico correto
                 st.write(f"Número de registros após ajuste: {len(historical_forecast)}")
-
+                
                 # Cálculo das métricas de erro
                 mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
                 mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
