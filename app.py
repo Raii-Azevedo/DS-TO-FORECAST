@@ -43,9 +43,7 @@ if uploaded_file:
                 )
                 forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format='%d/%m/%Y')
 
-                # Usamos todo o histórico, então não há necessidade de filtrar
-                # forecast_data = forecast_data.tail(num_history)
-
+                # Usamos todo o histórico (sem filtros)
                 # Criação do modelo Prophet
                 model = Prophet()
                 model.fit(forecast_data)
@@ -59,13 +57,13 @@ if uploaded_file:
                     step=1
                 )
 
-                # Geração do forecast
+                # Geração do forecast (garantindo que a previsão começa após o último mês)
                 future = model.make_future_dataframe(periods=forecast_months, freq="M")
                 forecast = model.predict(future)
 
                 # Adicionar coluna indicando se é histórico ou forecast
                 forecast['type'] = forecast['ds'].apply(
-                    lambda x: 'Histórico' if x <= pd.to_datetime('today') else 'Forecast'
+                    lambda x: 'Histórico' if x <= forecast_data['ds'].max() else 'Forecast'
                 )
 
                 # Cálculo do MAPE (Mean Absolute Percentage Error)
