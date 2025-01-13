@@ -87,7 +87,7 @@ if uploaded_file:
 
                 # Exibição do resultado com a coluna extra
                 st.subheader(f"Tabela do Forecast com Histórico e Forecast")
-                st.dataframe(forecast[["ds", "yhat", "yhat_lower", "yhat_upper", "type"]])
+                st.dataframe(forecast[["ds", "yhat_lower", "yhat", "yhat_upper", "type"]])
 
                 # Criação do gráfico
                 fig = go.Figure()
@@ -101,15 +101,6 @@ if uploaded_file:
                     line=dict(color='blue', width=1)
                 ))
 
-                # Linha de previsão (yhat)
-                fig.add_trace(go.Scatter(
-                    x=forecast["ds"],
-                    y=forecast["yhat"],
-                    mode='lines',
-                    name="Previsão (yhat)",
-                    line=dict(color='green', width=2)
-                ))
-
                 # Linha superior (yhat_upper)
                 fig.add_trace(go.Scatter(
                     x=forecast["ds"],
@@ -117,6 +108,15 @@ if uploaded_file:
                     mode='lines',
                     name="Limite Superior (yhat_upper)",
                     line=dict(color='orange', width=1, dash='dash')
+                ))
+
+                # Linha de previsão (yhat)
+                fig.add_trace(go.Scatter(
+                    x=forecast["ds"],
+                    y=forecast["yhat"],
+                    mode='lines',
+                    name="Previsão (yhat)",
+                    line=dict(color='green', width=2)
                 ))
 
                 # Linha inferior (yhat_lower)
@@ -146,7 +146,7 @@ if uploaded_file:
                 # Exibir uma tabela estilizada com os valores de Forecast
                 st.subheader("Tabela de Forecast (Valores Previstos)")
                 forecast_table = forecast_only[["ds", "yhat", "yhat_lower", "yhat_upper"]]
-                forecast_table.columns = ["Data", "Previsão (Yhat)", "Limite Inferior (Yhat Lower)", "Limite Superior (Yhat Upper)"]
+                forecast_table.columns = ["Data", "Limite Inferior (Yhat Lower)", "Previsão (Yhat)", "Limite Superior (Yhat Upper)"]
 
                 # Estilizando a tabela com cores
                 def color_forecast(val):
