@@ -50,7 +50,7 @@ if uploaded_file:
                 forecast_data = data[[date_column, value_column]].rename(
                     columns={date_column: "ds", value_column: "y"}
                 )
-                forecast_data["ds"] = pd.to_datetime(forecast_data["ds"])
+                forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format="%d/%m/%Y")
 
                 # Seleciona apenas o número de registros históricos solicitado
                 forecast_data = forecast_data.tail(num_history)
@@ -58,6 +58,11 @@ if uploaded_file:
                 # Criação do modelo Prophet
                 model = Prophet()
                 model.fit(forecast_data)
+
+                # Identificar o último mês com dados históricos
+                last_date = forecast_data['ds'].max()
+                next_month = last_date + pd.DateOffset(months=1)
+                next_month_first_day = pd.to_datetime(f"{next_month.year}-{next_month.month}-01")
 
                 # Input do usuário para o número de meses de forecast
                 forecast_months = st.slider(
@@ -68,13 +73,13 @@ if uploaded_file:
                     step=1
                 )
 
-                # Geração do forecast
+                # Geração do forecast a partir do mês seguinte ao último mês registrado
                 future = model.make_future_dataframe(periods=forecast_months, freq="M")
                 forecast = model.predict(future)
 
-                # Adicionar coluna indicando se é histórico ou forecast
+                # Ajusta a coluna 'type' para indicar se é Histórico ou Forecast
                 forecast['type'] = forecast['ds'].apply(
-                    lambda x: 'Histórico' if x <= forecast_data['ds'].max() else 'Forecast'
+                    lambda x: 'Histórico' if x <= last_date else 'Forecast'
                 )
 
                 # Cálculo do MAPE (Mean Absolute Percentage Error)
@@ -141,7 +146,7 @@ if uploaded_file:
                 st.plotly_chart(fig)
 
                 # Filtrar apenas os dados de Forecast (a partir do último mês histórico)
-                forecast_only = forecast[forecast['ds'] > forecast_data['ds'].max()]
+                forecast_only = forecast[forecast['ds'] > last_date]
 
                 # Exibir uma tabela estilizada com os valores de Forecast
                 st.subheader("Tabela de Forecast (Valores Previstos)")
