@@ -204,21 +204,6 @@ if uploaded_file:
             else:
                 st.warning("Selecione as colunas de data e valores para continuar.")
 
-            # Comparação de acuracidade (opcional)
-            historical_forecast = forecast[forecast["type"] == "Histórico"]
-            if not historical_forecast.empty:
-                mae = mean_absolute_error(data["y"], historical_forecast["yhat"])
-                mse = mean_squared_error(data["y"], historical_forecast["yhat"])
-                rmse = np.sqrt(mse)
-                mape = mean_absolute_percentage_error(data["y"], historical_forecast["yhat"])
-
-                st.subheader("Métricas de Acuracidade:")
-                st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
-                st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
-                st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
-                st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
-
-
         except Exception as e:
             st.error(f"Ocorreu um erro: {e}")
 
