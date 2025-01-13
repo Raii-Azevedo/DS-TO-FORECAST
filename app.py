@@ -81,14 +81,13 @@ if uploaded_file:
                 # Criação do gráfico
                 fig = go.Figure()
 
-                # Linha de dados históricos (agora uma linha contínua com marcadores)
+                # Linha de dados históricos (sem marcadores agora)
                 fig.add_trace(go.Scatter(
                     x=forecast_data["ds"],
                     y=forecast_data["y"],
-                    mode='lines+markers',  # Linha contínua com marcadores
+                    mode='lines',  # Apenas linha, sem marcadores
                     name="Histórico",
-                    line=dict(color='blue', width=2),  # Linha azul contínua
-                    marker=dict(size=6, color='blue')  # Marcadores azuis
+                    line=dict(color='blue', width=2)  # Linha azul contínua
                 ))
 
                 # Linha de previsão (yhat) com marcadores
