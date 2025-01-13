@@ -193,30 +193,28 @@ if uploaded_file:
 
                 st.plotly_chart(forecast_fig)
 
-                # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
-                historical_forecast = forecast[forecast["type"] == "Histórico"]
-                if len(historical_forecast) >= len(forecast_data):
-                    historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
-                    
-                    # Cálculo das métricas de erro
-                    mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
-                    mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
-                    rmse = np.sqrt(mse)
-                    mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
+                                # Cálculo das métricas de erro (MAE, MSE, RMSE, MAPE)
+                try:
+                    historical_forecast = forecast[forecast["type"] == "Histórico"]
+                    st.write(f"Número de registros históricos: {len(historical_forecast)}")
+                    if len(historical_forecast) >= len(forecast_data):
+                        historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
+                        st.write(f"Número de registros após ajuste: {len(historical_forecast)}")
+                        
+                        # Cálculo das métricas de erro
+                        mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
+                        mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
+                        rmse = np.sqrt(mse)
+                        mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
 
-                    st.subheader("Métricas de Acuracidade:")
-                    st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
-                    st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
-                    st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
-                    st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
-                else:
-                    st.warning("Não há dados históricos suficientes para calcular as métricas de erro.")
-
-            else:
-                st.warning("Selecione as colunas de data e valores para continuar.")
-
-        except Exception as e:
-            st.error(f"Ocorreu um erro: {e}")
-
-    except Exception as e:
-        st.error(f"Erro ao carregar o arquivo: {e}")
+                        st.subheader("Métricas de Acuracidade:")
+                        st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
+                        st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
+                        st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
+                        st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
+                    else:
+                        st.warning("Não há dados históricos suficientes para calcular as métricas de erro.")
+                except KeyError as e:
+                    st.error(f"Erro com as colunas: {e}")
+                except Exception as e:
+                    st.error(f"Ocorreu um erro durante o cálculo das métricas: {e}")
