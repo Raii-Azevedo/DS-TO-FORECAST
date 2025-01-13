@@ -44,6 +44,9 @@ if uploaded_file:
             model = Prophet()
             model.fit(data)
 
+            # Determinar a última data registrada nos dados
+            last_date = data["ds"].max()
+
             # Input do usuário para o número de meses de previsão
             st.subheader("Configuração do Período de Forecast")
             forecast_months = st.slider(
@@ -56,11 +59,11 @@ if uploaded_file:
 
             # Geração do DataFrame futuro com base no input do usuário
             future = model.make_future_dataframe(periods=forecast_months, freq="MS")  # Primeiros dias dos meses
+            future = future[future["ds"] > last_date]  # Incluir apenas datas após o último mês registrado
             forecast = model.predict(future)
 
             # Adicionar colunas de tipo para identificar histórico e previsão
-            last_date = data["ds"].max()
-            forecast["type"] = forecast["ds"].apply(lambda x: "Histórico" if x <= last_date else "Forecast")
+            forecast["type"] = "Forecast"
 
             # Ajustar formato de datas para manter apenas o primeiro dia do mês
             forecast["ds"] = forecast["ds"].dt.to_period("M").dt.to_timestamp()
@@ -78,10 +81,9 @@ if uploaded_file:
             ))
 
             # Previsão (yhat)
-            forecast_only = forecast[forecast["type"] == "Forecast"]
             fig.add_trace(go.Scatter(
-                x=forecast_only["ds"],
-                y=forecast_only["yhat"],
+                x=forecast["ds"],
+                y=forecast["yhat"],
                 mode='lines',
                 name="Previsão",
                 line=dict(color='green', width=2)
@@ -89,15 +91,15 @@ if uploaded_file:
 
             # Limites de confiança
             fig.add_trace(go.Scatter(
-                x=forecast_only["ds"],
-                y=forecast_only["yhat_upper"],
+                x=forecast["ds"],
+                y=forecast["yhat_upper"],
                 mode='lines',
                 name="Limite Superior",
                 line=dict(color='orange', dash='dash')
             ))
             fig.add_trace(go.Scatter(
-                x=forecast_only["ds"],
-                y=forecast_only["yhat_lower"],
+                x=forecast["ds"],
+                y=forecast["yhat_lower"],
                 mode='lines',
                 name="Limite Inferior",
                 line=dict(color='red', dash='dash')
@@ -116,18 +118,16 @@ if uploaded_file:
             st.plotly_chart(fig)
 
             # Comparação de acuracidade (opcional)
-            historical_forecast = forecast[forecast["type"] == "Histórico"]
-            if not historical_forecast.empty:
-                mae = mean_absolute_error(data["y"], historical_forecast["yhat"])
-                mse = mean_squared_error(data["y"], historical_forecast["yhat"])
-                rmse = np.sqrt(mse)
-                mape = mean_absolute_percentage_error(data["y"], historical_forecast["yhat"])
+            st.subheader("Métricas de Acuracidade:")
+            mae = mean_absolute_error(data["y"], model.predict(data)["yhat"])
+            mse = mean_squared_error(data["y"], model.predict(data)["yhat"])
+            rmse = np.sqrt(mse)
+            mape = mean_absolute_percentage_error(data["y"], model.predict(data)["yhat"])
 
-                st.subheader("Métricas de Acuracidade:")
-                st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
-                st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
-                st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
-                st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
+            st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
+            st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
+            st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
+            st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
 
     except Exception as e:
         st.error(f"Erro: {e}")
