@@ -19,7 +19,7 @@ if uploaded_file:
     try:
         if uploaded_file.name.endswith('.csv'):
             data = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith(('.xlsx', '.xls')):
+        elif uploaded_file.name.endswith(('.xlsx', '.xls')):  # Suporte a arquivos Excel
             data = pd.read_excel(uploaded_file)
         else:
             st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
@@ -82,8 +82,32 @@ if uploaded_file:
                     # Considerando os dados mais recentes (último mês registrado) para o cálculo
                     historical_values = forecast_data.tail(forecast_months)
                     historical_values = historical_values.merge(forecast[['ds', 'yhat']], on='ds', how='left')
-                    mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
-                    st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
+
+                    # Verifica se a previsão (yhat) foi gerada corretamente antes de calcular o MAPE
+                    if not historical_values['yhat'].isnull().any():
+                        mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
+                        st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
+                    else:
+                        st.warning("Não foi possível calcular o MAPE devido à falta de previsões para os dados históricos.")
+
+                # Comparação de acuracidade (opcional)
+                historical_forecast = forecast[forecast["type"] == "Histórico"]
+
+                # Certifique-se de que há valores históricos suficientes para comparar
+                if not historical_forecast.empty:
+                    historical_forecast = historical_forecast.tail(len(forecast_data))  # Garante que estamos comparando com o histórico correto
+                    
+                    # Cálculo das métricas de erro
+                    mae = mean_absolute_error(historical_forecast["y"], historical_forecast["yhat"])
+                    mse = mean_squared_error(historical_forecast["y"], historical_forecast["yhat"])
+                    rmse = np.sqrt(mse)
+                    mape = mean_absolute_percentage_error(historical_forecast["y"], historical_forecast["yhat"])
+
+                    st.subheader("Métricas de Acuracidade:")
+                    st.write(f"Erro Absoluto Médio (MAE): {mae:.2f}")
+                    st.write(f"Erro Quadrático Médio (MSE): {mse:.2f}")
+                    st.write(f"Raiz do Erro Quadrático Médio (RMSE): {rmse:.2f}")
+                    st.write(f"Erro Percentual Absoluto Médio (MAPE): {mape * 100:.2f}%")
 
                 # Exibição do resultado com a coluna extra
                 st.subheader(f"Tabela do Forecast com Histórico e Forecast")
