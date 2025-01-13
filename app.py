@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from prophet import Prophet
 import plotly.graph_objects as go
-from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
+from sklearn.metrics import mean_absolute_percentage_error
 import numpy as np
 
 # Título do App
@@ -140,7 +140,7 @@ if uploaded_file:
                 # Exibir o gráfico no Streamlit
                 st.plotly_chart(fig)
 
-                # Filtrar apenas os dados de Forecast
+                # Filtrar apenas os dados de Forecast (a partir do último mês histórico)
                 forecast_only = forecast[forecast['ds'] > forecast_data['ds'].max()]
 
                 # Exibir uma tabela estilizada com os valores de Forecast
