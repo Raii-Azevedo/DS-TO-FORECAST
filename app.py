@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from sklearn.metrics import mean_absolute_percentage_error
 
 # Título do App
-st.title("P&L - ARTEFACT")
+st.title("ARTEFACT")
 
 # Subtítulo do App
 st.subheader("Análise preditiva de P&L utilizando modelo de previsão Prophet")
@@ -25,7 +25,7 @@ if uploaded_file:
             st.stop()
 
         # Exibição inicial dos dados
-        st.subheader("Dados Carregados (Apenas 10 Primeiras Linhas):")
+        st.subheader("Dados Carregados (10 Primeiras Linhas):")
         st.dataframe(data.head(10))
 
         # Tabela com diretrizes do MAPE
