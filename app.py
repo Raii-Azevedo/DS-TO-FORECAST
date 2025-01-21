@@ -26,10 +26,10 @@ def create_forecast_plot(forecast, col):
     return fig
 
 # Streamlit app
-st.set_page_config(page_title="ARTEFACT - Análise Preditiva de P&L", layout="wide")
+st.set_page_config(page_title="ARTEFACT - Análise Preditiva", layout="wide")
 
 st.title("ARTEFACT")
-st.subheader("Análise preditiva de P&L utilizando modelo de previsão Prophet")
+st.subheader("Análise preditiva utilizando modelo de previsão Prophet")
 
 # Sidebar for options
 st.sidebar.header("Configurações")
