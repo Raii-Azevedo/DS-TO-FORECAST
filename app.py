@@ -1,43 +1,21 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from prophet import Prophet
 import plotly.graph_objects as go
-from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, mean_absolute_error
-from sklearn.preprocessing import MinMaxScaler
-import base64
-from io import BytesIO
+from sklearn.metrics import mean_absolute_percentage_error
 
-# Function to download DataFrame as CSV
-def download_csv(df):
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="forecast_results.csv">Download CSV File</a>'
-    return href
+# Título do App
+st.title("P&L - ARTEFACT")
 
-# Function to create Plotly figure
-def create_forecast_plot(forecast, col):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=forecast[forecast['type'] == 'Histórico']["ds"], y=forecast[forecast['type'] == 'Histórico']["y"], mode='lines', name="Histórico", line=dict(color='blue', width=2)))
-    fig.add_trace(go.Scatter(x=forecast[forecast['type'] == 'Forecast']["ds"], y=forecast[forecast['type'] == 'Forecast']["yhat"], mode='lines+markers', name="Previsão (yhat)", line=dict(color='green', width=2)))
-    fig.add_trace(go.Scatter(x=forecast[forecast['type'] == 'Forecast']["ds"], y=forecast[forecast['type'] == 'Forecast']["yhat_upper"], mode='lines', name="Limite Superior", line=dict(color='orange', width=1, dash='dash')))
-    fig.add_trace(go.Scatter(x=forecast[forecast['type'] == 'Forecast']["ds"], y=forecast[forecast['type'] == 'Forecast']["yhat_lower"], mode='lines', name="Limite Inferior", line=dict(color='red', width=1, dash='dash')))
-    fig.update_layout(title=f"Forecast para {col}", xaxis_title="Data", yaxis_title="Valor", legend_title="Legenda", template="plotly_white")
-    return fig
+# Subtítulo do App
+st.subheader("Análise preditiva de P&L utilizando modelo de previsão Prophet")
 
-# Streamlit app
-st.set_page_config(page_title="ARTEFACT - Análise Preditiva", layout="wide")
-
-st.title("ARTEFACT")
-st.subheader("Análise preditiva utilizando modelo de previsão Prophet")
-
-# Sidebar for options
-st.sidebar.header("Configurações")
-uploaded_file = st.sidebar.file_uploader("Arraste e solte a base de dados aqui", type=["csv", "xlsx", "xls"])
+# Upload do arquivo via Drag-and-Drop
+uploaded_file = st.file_uploader("Arraste e solte a base de dados aqui", type=["csv", "xlsx", "xls"])
 
 if uploaded_file:
     try:
-        # Load data
+        # Carregamento do arquivo
         if uploaded_file.name.endswith('.csv'):
             data = pd.read_csv(uploaded_file)
         elif uploaded_file.name.endswith(('.xlsx', '.xls')):
@@ -46,91 +24,135 @@ if uploaded_file:
             st.error("Formato de arquivo não suportado. Use CSV, XLS ou XLSX.")
             st.stop()
 
-        st.subheader("Dados Carregados (10 Primeiras Linhas):")
+        # Exibição inicial dos dados
+        st.subheader("Dados Carregados (Apenas 10 Primeiras Linhas):")
         st.dataframe(data.head(10))
 
-        # Data preprocessing options
-        st.sidebar.subheader("Pré-processamento")
-        handle_missing = st.sidebar.checkbox("Tratar valores ausentes")
-        if handle_missing:
-            data = data.fillna(method='ffill').fillna(method='bfill')
+        # Seleção de colunas
+        st.subheader("Configuração do Forecast")
+        date_column = st.selectbox("Selecione a coluna de data:", data.columns)
+        value_column = st.selectbox("Selecione a coluna de valores:", data.columns)
 
-        normalize_data = st.sidebar.checkbox("Normalizar dados")
-        if normalize_data:
-            scaler = MinMaxScaler()
-            numeric_columns = data.select_dtypes(include=[np.number]).columns
-            data[numeric_columns] = scaler.fit_transform(data[numeric_columns])
+        if date_column and value_column:
+            # Prepara os dados
+            forecast_data = data[[date_column, value_column]].rename(
+                columns={date_column: "ds", value_column: "y"}
+            )
+            forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format="%d/%m/%Y")
 
-        # Forecast configuration
-        st.sidebar.subheader("Configuração do Forecast")
-        date_column = st.sidebar.selectbox("Selecione a coluna de data:", data.columns)
-        forecast_months = st.sidebar.slider("Meses para previsão:", 1, 24, 6)
+            # Criação do modelo Prophet
+            model = Prophet()
+            model.fit(forecast_data)
 
-        # Prophet parameters
-        st.sidebar.subheader("Parâmetros do Prophet")
-        yearly_seasonality = st.sidebar.checkbox("Sazonalidade anual", value=True)
-        weekly_seasonality = st.sidebar.checkbox("Sazonalidade semanal", value=True)
-        daily_seasonality = st.sidebar.checkbox("Sazonalidade diária", value=False)
+            # Última data com valor
+            last_date = forecast_data['ds'].max()
 
-        if date_column:
-            data[date_column] = pd.to_datetime(data[date_column])
-            numeric_columns = data.select_dtypes(include=[np.number]).columns
+            # Configuração do forecast
+            forecast_months = st.slider(
+                "Selecione quantos meses à frente deseja prever:",
+                min_value=1,
+                max_value=12,
+                value=6,
+                step=1
+            )
 
-            consolidated_forecast = pd.DataFrame()
-            metrics = []
+            # Gerar dados futuros
+            future = model.make_future_dataframe(periods=forecast_months, freq="M")
+            forecast = model.predict(future)
 
-            for col in numeric_columns:
-                with st.expander(f"Forecast para {col}"):
-                    forecast_data = data[[date_column, col]].rename(columns={date_column: "ds", col: "y"})
-                    
-                    model = Prophet(yearly_seasonality=yearly_seasonality,
-                                    weekly_seasonality=weekly_seasonality,
-                                    daily_seasonality=daily_seasonality)
-                    model.fit(forecast_data)
+            # Combinação de dados históricos e previsão
+            forecast['y'] = forecast['ds'].map(
+                dict(zip(forecast_data['ds'], forecast_data['y']))
+            )
+            forecast['type'] = forecast['ds'].apply(
+                lambda x: 'Histórico' if x <= last_date else 'Forecast'
+            )
+            forecast['y'] = forecast.apply(
+                lambda row: row['y'] if row['type'] == 'Histórico' else row['yhat'], axis=1
+            )
 
-                    future = model.make_future_dataframe(periods=forecast_months, freq="M")
-                    forecast = model.predict(future)
+            # Cálculo do MAPE para os dados históricos
+            historical_values = forecast_data.merge(forecast[['ds', 'yhat']], on='ds', how='inner')
+            mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
+            st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
 
-                    last_date = forecast_data['ds'].max()
-                    forecast['y'] = forecast['ds'].map(dict(zip(forecast_data['ds'], forecast_data['y'])))
-                    forecast['type'] = forecast['ds'].apply(lambda x: 'Histórico' if x <= last_date else 'Forecast')
-                    forecast['y'] = forecast.apply(lambda row: row['y'] if row['type'] == 'Histórico' else row['yhat'], axis=1)
-                    forecast['item'] = col
+            # Exibição da tabela completa
+            st.subheader("Tabela do Forecast com Histórico e Forecast")
+            st.dataframe(forecast[["ds", "y", "yhat", "yhat_lower", "yhat_upper", "type"]])
 
-                    consolidated_forecast = pd.concat([consolidated_forecast, forecast], ignore_index=True)
+            # Gráfico principal com Upper e Lower
+            fig = go.Figure()
 
-                    # Calculate metrics
-                    historical_values = forecast_data.merge(forecast[['ds', 'yhat']], on='ds', how='inner')
-                    mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
-                    rmse = np.sqrt(mean_squared_error(historical_values['y'], historical_values['yhat']))
-                    mae = mean_absolute_error(historical_values['y'], historical_values['yhat'])
+            # Linha de dados históricos
+            fig.add_trace(go.Scatter(
+                x=forecast[forecast['type'] == 'Histórico']["ds"],
+                y=forecast[forecast['type'] == 'Histórico']["y"],
+                mode='lines',
+                name="Histórico",
+                line=dict(color='blue', width=2)
+            ))
 
-                    metrics.append({
-                        'Column': col,
-                        'MAPE': mape,
-                        'RMSE': rmse,
-                        'MAE': mae
-                    })
+            # Linha de previsão (yhat)
+            fig.add_trace(go.Scatter(
+                x=forecast[forecast['type'] == 'Forecast']["ds"],
+                y=forecast[forecast['type'] == 'Forecast']["yhat"],
+                mode='lines+markers',
+                name="Previsão (yhat)",
+                line=dict(color='green', width=2)
+            ))
 
-                    st.plotly_chart(create_forecast_plot(forecast, col), use_container_width=True)
+            # Linha superior (yhat_upper)
+            fig.add_trace(go.Scatter(
+                x=forecast[forecast['type'] == 'Forecast']["ds"],
+                y=forecast[forecast['type'] == 'Forecast']["yhat_upper"],
+                mode='lines',
+                name="Limite Superior (yhat_upper)",
+                line=dict(color='orange', width=1, dash='dash')
+            ))
 
-                    st.write(f"MAPE: {mape:.2%}")
-                    st.write(f"RMSE: {rmse:.2f}")
-                    st.write(f"MAE: {mae:.2f}")
+            # Linha inferior (yhat_lower)
+            fig.add_trace(go.Scatter(
+                x=forecast[forecast['type'] == 'Forecast']["ds"],
+                y=forecast[forecast['type'] == 'Forecast']["yhat_lower"],
+                mode='lines',
+                name="Limite Inferior (yhat_lower)",
+                line=dict(color='red', width=1, dash='dash')
+            ))
 
-            # Display consolidated results
-            st.subheader("Resultados Consolidados")
-            metrics_df = pd.DataFrame(metrics)
-            st.dataframe(metrics_df)
+            # Configuração do layout do gráfico
+            fig.update_layout(
+                title=f"Forecast de {forecast_months} Meses",
+                xaxis_title="Data",
+                yaxis_title="Valor",
+                legend_title="Legenda",
+                template="plotly_white"
+            )
 
-            st.subheader("Tabela Consolidada de Forecast")
-            st.dataframe(consolidated_forecast[["ds", "item", "y", "yhat", "yhat_lower", "yhat_upper", "type"]])
+            st.plotly_chart(fig)
 
-            # Download options
-            st.subheader("Download dos Resultados")
-            st.markdown(download_csv(consolidated_forecast), unsafe_allow_html=True)
-            
+            # Exibição de tabela colorida com valores de forecast
+            st.subheader("Tabela de Forecast (Valores Previstos)")
+            forecast_only = forecast[forecast['type'] == 'Forecast'][["ds", "yhat", "yhat_lower", "yhat_upper"]]
+            forecast_only.columns = ["Data", "Previsão (Yhat)", "Limite Inferior (Yhat Lower)", "Limite Superior (Yhat Upper)"]
+
+            # Estilizando a tabela
+            def color_forecast(val):
+                if val.name == "Previsão (Yhat)":
+                    return ['background-color: lightgreen' for _ in val]
+                elif val.name == "Limite Inferior (Yhat Lower)":
+                    return ['background-color: lightcoral' for _ in val]
+                elif val.name == "Limite Superior (Yhat Upper)":
+                    return ['background-color: lightblue' for _ in val]
+                return ['' for _ in val]
+
+            st.dataframe(
+                forecast_only.style.apply(color_forecast, axis=0).format(
+                    {"Previsão (Yhat)": "{:.2f}", "Limite Inferior (Yhat Lower)": "{:.2f}", "Limite Superior (Yhat Upper)": "{:.2f}"}
+                )
+            )
+
+        else:
+            st.warning("Selecione as colunas de data e valores para continuar.")
+
     except Exception as e:
         st.error(f"Ocorreu um erro: {e}")
-else:
-    st.info("Por favor, faça o upload de um arquivo para começar.")
