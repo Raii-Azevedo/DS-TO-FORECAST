@@ -65,7 +65,7 @@ if uploaded_file:
             )
 
             # Gerar dados futuros
-            future = model.make_future_dataframe(periods=forecast_months, freq="M")  # Corrigido freq para "M"
+            future = model.make_future_dataframe(periods=forecast_months, freq="ME")  # Corrigido freq para "M"
             forecast = model.predict(future)
 
             # Mapeamento de histórico e forecast
