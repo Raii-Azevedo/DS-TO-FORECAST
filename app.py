@@ -38,14 +38,22 @@ if uploaded_file:
             forecast_data = data[[date_column, value_column]].rename(
                 columns={date_column: "ds", value_column: "y"}
             )
-            forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], format="%d/%m/%Y")
+
+            # Conversão para datetime
+            forecast_data["ds"] = pd.to_datetime(forecast_data["ds"], errors="coerce")
+            
+            # Remove valores inválidos
+            forecast_data = forecast_data.dropna(subset=["ds"])
+
+            # Exibição dos dados formatados
+            st.dataframe(forecast_data.assign(ds=forecast_data["ds"].dt.strftime("%d/%m/%Y")))
 
             # Criação do modelo Prophet
             model = Prophet()
             model.fit(forecast_data)
 
             # Última data com valor
-            last_date = forecast_data['ds'].max()
+            last_date = forecast_data["ds"].max()
 
             # Configuração do forecast
             forecast_months = st.slider(
@@ -57,23 +65,23 @@ if uploaded_file:
             )
 
             # Gerar dados futuros
-            future = model.make_future_dataframe(periods=forecast_months, freq="M")
+            future = model.make_future_dataframe(periods=forecast_months, freq="M")  # Corrigido freq para "M"
             forecast = model.predict(future)
 
-            # Combinação de dados históricos e previsão
-            forecast['y'] = forecast['ds'].map(
-                dict(zip(forecast_data['ds'], forecast_data['y']))
+            # Mapeamento de histórico e forecast
+            forecast["y"] = forecast["ds"].map(
+                dict(zip(forecast_data["ds"], forecast_data["y"]))
             )
-            forecast['type'] = forecast['ds'].apply(
-                lambda x: 'Histórico' if x <= last_date else 'Forecast'
+            forecast["type"] = forecast["ds"].apply(
+                lambda x: "Histórico" if x <= last_date else "Forecast"
             )
-            forecast['y'] = forecast.apply(
-                lambda row: row['y'] if row['type'] == 'Histórico' else row['yhat'], axis=1
+            forecast["y"] = forecast.apply(
+                lambda row: row["y"] if row["type"] == "Histórico" else row["yhat"], axis=1
             )
 
             # Cálculo do MAPE para os dados históricos
-            historical_values = forecast_data.merge(forecast[['ds', 'yhat']], on='ds', how='inner')
-            mape = mean_absolute_percentage_error(historical_values['y'], historical_values['yhat'])
+            historical_values = forecast_data.merge(forecast[["ds", "yhat"]], on="ds", how="inner")
+            mape = mean_absolute_percentage_error(historical_values["y"], historical_values["yhat"])
             st.subheader(f"MAPE (Mean Absolute Percentage Error): {mape * 100:.2f}%")
 
             # Exibição da tabela completa
@@ -85,38 +93,38 @@ if uploaded_file:
 
             # Linha de dados históricos
             fig.add_trace(go.Scatter(
-                x=forecast[forecast['type'] == 'Histórico']["ds"],
-                y=forecast[forecast['type'] == 'Histórico']["y"],
-                mode='lines',
+                x=forecast[forecast["type"] == "Histórico"]["ds"],
+                y=forecast[forecast["type"] == "Histórico"]["y"],
+                mode="lines",
                 name="Histórico",
-                line=dict(color='blue', width=2)
+                line=dict(color="blue", width=2)
             ))
 
             # Linha de previsão (yhat)
             fig.add_trace(go.Scatter(
-                x=forecast[forecast['type'] == 'Forecast']["ds"],
-                y=forecast[forecast['type'] == 'Forecast']["yhat"],
-                mode='lines+markers',
+                x=forecast[forecast["type"] == "Forecast"]["ds"],
+                y=forecast[forecast["type"] == "Forecast"]["yhat"],
+                mode="lines+markers",
                 name="Previsão (yhat)",
-                line=dict(color='green', width=2)
+                line=dict(color="green", width=2)
             ))
 
             # Linha superior (yhat_upper)
             fig.add_trace(go.Scatter(
-                x=forecast[forecast['type'] == 'Forecast']["ds"],
-                y=forecast[forecast['type'] == 'Forecast']["yhat_upper"],
-                mode='lines',
+                x=forecast[forecast["type"] == "Forecast"]["ds"],
+                y=forecast[forecast["type"] == "Forecast"]["yhat_upper"],
+                mode="lines",
                 name="Limite Superior (yhat_upper)",
-                line=dict(color='orange', width=1, dash='dash')
+                line=dict(color="orange", width=1, dash="dash")
             ))
 
             # Linha inferior (yhat_lower)
             fig.add_trace(go.Scatter(
-                x=forecast[forecast['type'] == 'Forecast']["ds"],
-                y=forecast[forecast['type'] == 'Forecast']["yhat_lower"],
-                mode='lines',
+                x=forecast[forecast["type"] == "Forecast"]["ds"],
+                y=forecast[forecast["type"] == "Forecast"]["yhat_lower"],
+                mode="lines",
                 name="Limite Inferior (yhat_lower)",
-                line=dict(color='red', width=1, dash='dash')
+                line=dict(color="red", width=1, dash="dash")
             ))
 
             # Configuração do layout do gráfico
@@ -132,18 +140,18 @@ if uploaded_file:
 
             # Exibição de tabela colorida com valores de forecast
             st.subheader("Tabela de Forecast (Valores Previstos)")
-            forecast_only = forecast[forecast['type'] == 'Forecast'][["ds", "yhat", "yhat_lower", "yhat_upper"]]
+            forecast_only = forecast[forecast["type"] == "Forecast"][["ds", "yhat", "yhat_lower", "yhat_upper"]]
             forecast_only.columns = ["Data", "Previsão (Yhat)", "Limite Inferior (Yhat Lower)", "Limite Superior (Yhat Upper)"]
 
             # Estilizando a tabela
             def color_forecast(val):
                 if val.name == "Previsão (Yhat)":
-                    return ['background-color: lightgreen' for _ in val]
+                    return ["background-color: lightgreen" for _ in val]
                 elif val.name == "Limite Inferior (Yhat Lower)":
-                    return ['background-color: lightcoral' for _ in val]
+                    return ["background-color: lightcoral" for _ in val]
                 elif val.name == "Limite Superior (Yhat Upper)":
-                    return ['background-color: lightblue' for _ in val]
-                return ['' for _ in val]
+                    return ["background-color: lightblue" for _ in val]
+                return ["" for _ in val]
 
             st.dataframe(
                 forecast_only.style.apply(color_forecast, axis=0).format(
