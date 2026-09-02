@@ -127,6 +127,21 @@ servir, a aplicação mostra o diagnóstico completo em vez de uma mensagem gen�
 
 ---
 
+## Interface
+
+Tudo fica na tela principal, em três passos numerados — dataset, colunas, modelo.
+Não há barra lateral: ela é ocultada por CSS e o app abre com
+`initial_sidebar_state="collapsed"`.
+
+O tema escuro é **fixo**, definido em `.streamlit/config.toml` com `base = "dark"`.
+Sem esse arquivo, a preferência do navegador ou a configuração do Streamlit Cloud
+podem impor o tema claro, e o texto claro sobre as superfícies claras do Streamlit
+fica ilegível. As cores do `config.toml` precisam acompanhar os tokens da classe
+`Brand` em `src/config.py` — há um teste que verifica isso, e outro que impede
+qualquer cor escura de ser usada como cor de texto.
+
+---
+
 ## Nota sobre CSS no Streamlit
 
 O `st.markdown` passa por um parser CommonMark antes de renderizar HTML, e duas

@@ -6,24 +6,39 @@ from dataclasses import dataclass, field
 
 
 # --------------------------------------------------------------------------- #
-# Identidade visual Artefact
+# Identidade visual Artefact — paleta dark
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class Brand:
+    """Tokens de cor da aplicação.
+
+    A aplicação roda sempre em tema escuro (fixado em `.streamlit/config.toml`),
+    então `surface`/`canvas` são fundos escuros e `ink` é a cor de texto clara.
+    Nunca use `navy` como cor de texto: ele é fundo aqui.
+    """
+
+    # Cores de marca (usadas em gradientes e destaques, não em texto sobre fundo escuro)
     navy: str = "#12123B"
     navy_soft: str = "#1E1E5A"
     pink: str = "#FF5C8A"
-    pink_soft: str = "#FFE3EB"
-    violet: str = "#7B61FF"
-    cyan: str = "#00C2CB"
+    pink_soft: str = "#FF8FB0"
+
+    # Acentos para gráficos
+    violet: str = "#9B87FF"
+    cyan: str = "#3DD9E0"
     amber: str = "#FFB020"
-    red: str = "#E5484D"
-    green: str = "#2FA84F"
-    ink: str = "#1A1A2E"
-    muted: str = "#6B7280"
-    line: str = "#E5E7EB"
-    surface: str = "#FFFFFF"
-    canvas: str = "#F7F8FC"
+    red: str = "#FF6B6E"
+    green: str = "#4ECB71"
+
+    # Superfícies e texto (dark)
+    canvas: str = "#0D0D1F"      # fundo da página
+    surface: str = "#1A1A38"     # cards, sidebar, painéis
+    surface_alt: str = "#22224A"  # hover e faixas alternadas
+    ink: str = "#ECECF5"         # texto principal
+    ink_strong: str = "#FFFFFF"  # títulos e números de destaque
+    muted: str = "#9A9AB8"       # texto secundário
+    line: str = "#31315C"        # bordas e grades
+
     font: str = "Roboto, 'Helvetica Neue', Arial, sans-serif"
 
 

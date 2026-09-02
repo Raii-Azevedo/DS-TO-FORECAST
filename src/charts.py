@@ -16,22 +16,36 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
 
 
 def _base_layout(fig: go.Figure, title: str, y_title: str = "Valor") -> go.Figure:
+    """Layout escuro, alinhado ao tema fixo da aplicação."""
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16, color=BRAND.navy, family=BRAND.font)),
+        template="plotly_dark",
+        title=dict(
+            text=title, font=dict(size=16, color=BRAND.ink_strong, family=BRAND.font)
+        ),
         font=dict(family=BRAND.font, color=BRAND.ink, size=12),
         plot_bgcolor=BRAND.surface,
         paper_bgcolor=BRAND.surface,
         hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor=BRAND.surface_alt,
+            bordercolor=BRAND.line,
+            font=dict(color=BRAND.ink, family=BRAND.font),
+        ),
         margin=dict(l=10, r=10, t=54, b=10),
         height=440,
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02,
             xanchor="left", x=0, bgcolor="rgba(0,0,0,0)",
+            font=dict(color=BRAND.ink),
         ),
-        xaxis=dict(title="", showgrid=False, linecolor=BRAND.line, ticks="outside"),
+        xaxis=dict(
+            title="", showgrid=False, linecolor=BRAND.line,
+            ticks="outside", tickfont=dict(color=BRAND.muted),
+        ),
         yaxis=dict(
-            title=y_title, gridcolor=BRAND.line, zerolinecolor=BRAND.line,
-            tickformat=",.0f",
+            title=dict(text=y_title, font=dict(color=BRAND.muted)),
+            gridcolor=BRAND.line, zerolinecolor=BRAND.line,
+            tickformat=",.0f", tickfont=dict(color=BRAND.muted),
         ),
     )
     return fig
@@ -63,7 +77,7 @@ def forecast_chart(result: ForecastResult, y_title: str = "Valor") -> go.Figure:
         fig.add_trace(go.Scatter(
             x=history["ds"], y=history["y"], mode="lines",
             name="Histórico",
-            line=dict(color=BRAND.navy, width=2.5),
+            line=dict(color=BRAND.cyan, width=2.5),
             hovertemplate="%{x|%b/%Y}<br>%{y:,.2f}<extra>Histórico</extra>",
         ))
         fig.add_trace(go.Scatter(
@@ -99,7 +113,7 @@ def residuals_chart(result: ForecastResult) -> go.Figure:
     """Erro do modelo (real − ajustado) no período histórico."""
     history = result.history.copy()
     history["residuo"] = history["y"] - history["yhat"]
-    colors = [BRAND.cyan if v >= 0 else BRAND.amber for v in history["residuo"]]
+    colors = [BRAND.green if v >= 0 else BRAND.amber for v in history["residuo"]]
 
     fig = go.Figure(
         go.Bar(

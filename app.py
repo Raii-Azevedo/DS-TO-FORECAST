@@ -4,6 +4,8 @@ Recebe qualquer dataset com uma coluna de data e uma de valor e devolve a
 projeção dos próximos períodos. O domínio dos dados é indiferente: vendas,
 volume, headcount, consumo, tempo de resposta ou qualquer outra métrica.
 
+Toda a interface fica na tela principal — não há barra lateral.
+
 Execução:
     streamlit run app.py
 """
@@ -38,8 +40,17 @@ st.set_page_config(
     page_title=f"{APP.title} · {APP.owner}",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
+
+AGGREGATION_LABELS = {
+    "sum": "Somar",
+    "mean": "Média",
+    "median": "Mediana",
+    "last": "Último valor",
+    "max": "Máximo",
+    "min": "Mínimo",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -96,13 +107,12 @@ def main() -> None:
     inject_css()
     hero()
 
-    with st.sidebar:
-        st.markdown("## Base de dados")
-        uploaded = st.file_uploader(
-            "Arraste um arquivo",
-            type=[e.lstrip(".") for e in APP.supported_extensions],
-            help="CSV, XLSX ou XLS com uma coluna de data e uma de valores.",
-        )
+    section("1. Dataset", "CSV, XLSX ou XLS com uma coluna de data e uma de valor")
+    uploaded = st.file_uploader(
+        "Arraste o arquivo ou clique para selecionar",
+        type=[e.lstrip(".") for e in APP.supported_extensions],
+        label_visibility="collapsed",
+    )
 
     if uploaded is None:
         _welcome()
@@ -115,7 +125,7 @@ def main() -> None:
     if uploaded.name.lower().endswith((".xlsx", ".xls")):
         sheets = excel_sheet_names(raw)
         if len(sheets) > 1:
-            sheet = st.sidebar.selectbox("Aba da planilha", sheets)
+            sheet = st.selectbox("Aba da planilha", sheets)
 
     # ---- Leitura --------------------------------------------------------- #
     try:
@@ -123,6 +133,10 @@ def main() -> None:
     except DataLoadError as exc:
         st.error(f"**Não foi possível ler o arquivo.** {exc}")
         return
+
+    st.caption(
+        f"{uploaded.name} · {len(data):,} linhas · {len(data.columns)} colunas".replace(",", ".")
+    )
 
     # ---- Mapeamento de colunas ------------------------------------------- #
     profile = _profile(data)
@@ -133,49 +147,53 @@ def main() -> None:
         _render_mapping_error(data, profile, date_options, value_options)
         return
 
+    section(
+        "2. Colunas",
+        f"O percentual indica quantas linhas convertem corretamente "
+        f"(mínimo de {USABLE_THRESHOLD:.0%} para aparecer aqui)",
+    )
+
     def _label(column: str, kind: str) -> str:
         ratio = profile.loc[column, f"{kind}_ratio"]
         return f"{column} · {ratio:.0%}"
 
-    with st.sidebar:
-        st.markdown("## Mapeamento")
-        st.caption(
-            f"{len(date_options)} coluna(s) servem como data e "
-            f"{len(value_options)} como valor. O percentual indica quantas "
-            "linhas convertem corretamente."
-        )
-        show_all = st.checkbox(
-            "Mostrar todas as colunas", value=False,
-            help="Por padrão só aparecem as colunas que realmente convertem.",
-        )
+    show_all = st.toggle(
+        "Mostrar todas as colunas do arquivo",
+        value=False,
+        help="Por padrão só aparecem as colunas que realmente convertem.",
+    )
 
+    col_date, col_value, col_agg = st.columns(3)
+
+    with col_date:
         date_list = list(data.columns) if show_all else date_options
+        suggested_date = suggest_date_column(data, profile)
         date_col = st.selectbox(
-            "Coluna de data", date_list,
-            index=date_list.index(suggest_date_column(data, profile))
-            if suggest_date_column(data, profile) in date_list else 0,
+            "Coluna de data",
+            date_list,
+            index=date_list.index(suggested_date) if suggested_date in date_list else 0,
             format_func=lambda c: _label(c, "date"),
         )
 
+    with col_value:
         remaining = usable_value_columns(profile, exclude=date_col)
-        value_list = (
-            [c for c in data.columns if c != date_col] if show_all else remaining
-        )
+        value_list = [c for c in data.columns if c != date_col] if show_all else remaining
         if not value_list:
             st.error("Nenhuma coluna de valor sobrou. Escolha outra coluna de data.")
             return
-        suggested = suggest_value_column(data, exclude=date_col, profile=profile)
+        suggested_value = suggest_value_column(data, exclude=date_col, profile=profile)
         value_col = st.selectbox(
-            "Coluna de valor", value_list,
-            index=value_list.index(suggested) if suggested in value_list else 0,
+            "Coluna de valor",
+            value_list,
+            index=value_list.index(suggested_value) if suggested_value in value_list else 0,
             format_func=lambda c: _label(c, "value"),
         )
+
+    with col_agg:
         aggregation = st.selectbox(
-            "Datas repetidas", ["sum", "mean", "median", "last", "max", "min"],
-            format_func=lambda v: {
-                "sum": "Somar", "mean": "Média", "median": "Mediana",
-                "last": "Último valor", "max": "Máximo", "min": "Mínimo",
-            }[v],
+            "Datas repetidas",
+            list(AGGREGATION_LABELS),
+            format_func=AGGREGATION_LABELS.get,
             help="Como consolidar múltiplas linhas com a mesma data.",
         )
 
@@ -190,27 +208,39 @@ def main() -> None:
         return
 
     # ---- Parâmetros do modelo -------------------------------------------- #
-    with st.sidebar:
-        st.markdown("## Modelo")
-        st.caption(f"Frequência detectada: **{series.freq_label}**")
+    section("3. Modelo", f"Frequência detectada nos dados: {series.freq_label.lower()}")
+    col_freq, col_horizon = st.columns([1, 2])
+
+    with col_freq:
+        freq_names = list(FREQUENCIES)
+        freq_values = list(FREQUENCIES.values())
         freq_label = st.selectbox(
-            "Frequência", list(FREQUENCIES),
-            index=list(FREQUENCIES.values()).index(series.freq)
-            if series.freq in FREQUENCIES.values() else 2,
+            "Frequência",
+            freq_names,
+            index=freq_values.index(series.freq) if series.freq in freq_values else 2,
         )
+
+    with col_horizon:
         horizon = st.slider(
             "Períodos a prever", 1, SETTINGS.max_horizon, SETTINGS.default_horizon
         )
-        with st.expander("Opções avançadas"):
+
+    with st.expander("Opções avançadas do modelo"):
+        adv_growth, adv_season, adv_change = st.columns(3)
+        with adv_growth:
             growth = st.selectbox(
-                "Tendência", ["linear", "flat"],
+                "Tendência",
+                ["linear", "flat"],
                 format_func=lambda v: {"linear": "Linear", "flat": "Plana"}[v],
             )
+        with adv_season:
             seasonality = st.selectbox(
                 "Sazonalidade anual", ["Automática", "Ativada", "Desativada"]
             )
+        with adv_change:
             changepoint = st.slider(
-                "Flexibilidade da tendência", 0.01, 0.50, 0.05, 0.01,
+                "Flexibilidade da tendência",
+                0.01, 0.50, 0.05, 0.01,
                 help="Valores maiores permitem que a tendência mude mais rápido.",
             )
 
@@ -230,7 +260,10 @@ def main() -> None:
     _render_quality(series, result)
     _render_kpis(series, result)
 
-    section("Projeção", f"Motor: {result.engine} · intervalo de {int(SETTINGS.interval_width * 100)}%")
+    section(
+        "Projeção",
+        f"Motor: {result.engine} · intervalo de {int(SETTINGS.interval_width * 100)}%",
+    )
     st.plotly_chart(forecast_chart(result, value_col), use_container_width=True)
 
     _render_tables(result, series, value_col)
@@ -238,21 +271,22 @@ def main() -> None:
 
 def _welcome() -> None:
     """Tela inicial quando ainda não há arquivo."""
-    section("Como usar", "Três passos até a projeção")
+    section("Como funciona", "Três passos até a projeção")
     left, right = st.columns([1.35, 1])
     with left:
         st.markdown(
             """
-            1. **Carregue a base** na barra lateral (CSV, XLSX ou XLS).
-            2. **Confirme as colunas** de data e de valor — elas são detectadas
+            1. **Carregue o dataset** acima (CSV, XLSX ou XLS).
+            2. **Confirme as colunas** de data e de valor — são detectadas
                automaticamente, mas você pode trocá-las.
             3. **Escolha o horizonte** e leia a projeção, o intervalo de
                confiança e as métricas de qualidade do ajuste.
 
-            A base é limpa antes da modelagem: datas inválidas e valores não
-            numéricos são descartados, datas repetidas são consolidadas e
-            formatos brasileiros (`R$ 1.234,56`, negativos entre parênteses)
-            são convertidos automaticamente.
+            Qualquer métrica com histórico serve: vendas, volume, headcount,
+            consumo, tráfego. Os dados são limpos antes da modelagem — datas
+            inválidas e valores não numéricos são descartados, datas repetidas
+            são consolidadas e formatos brasileiros (`R$ 1.234,56`, negativos
+            entre parênteses) são convertidos automaticamente.
             """
         )
     with right:
@@ -275,7 +309,9 @@ def _render_column_hints(
     value_options: list[str],
 ) -> None:
     """Mostra quais colunas do arquivo servem como data e como valor."""
+    progress = st.column_config.ProgressColumn(format="%.0f%%", min_value=0, max_value=1)
     left, right = st.columns(2)
+
     with left:
         st.markdown("**Colunas que servem como data**")
         st.dataframe(
@@ -285,10 +321,9 @@ def _render_column_hints(
             if date_options
             else pd.DataFrame({"Conversão": []}),
             use_container_width=True,
-            column_config={"Conversão": st.column_config.ProgressColumn(
-                format="%.0f%%", min_value=0, max_value=1
-            )},
+            column_config={"Conversão": progress},
         )
+
     with right:
         st.markdown("**Colunas que servem como valor**")
         st.dataframe(
@@ -298,9 +333,7 @@ def _render_column_hints(
             if value_options
             else pd.DataFrame({"Conversão": []}),
             use_container_width=True,
-            column_config={"Conversão": st.column_config.ProgressColumn(
-                format="%.0f%%", min_value=0, max_value=1
-            )},
+            column_config={"Conversão": progress},
         )
 
 
@@ -318,33 +351,24 @@ def _render_mapping_error(
         missing.append("uma coluna de **valor numérico**")
 
     st.error(
-        f"Não encontrei {' nem '.join(missing)} nesta base. "
+        f"Não encontrei {' nem '.join(missing)} neste dataset. "
         f"Uma coluna é considerada utilizável quando pelo menos "
         f"{USABLE_THRESHOLD:.0%} das linhas convertem corretamente."
     )
 
     section("Diagnóstico das colunas", "O que cada coluna do arquivo contém")
-    diagnosis = (
+    progress = st.column_config.ProgressColumn(format="%.0f%%", min_value=0, max_value=1)
+    st.dataframe(
         profile[["date_ratio", "value_ratio"]]
         .rename(columns={"date_ratio": "Como data", "value_ratio": "Como valor"})
-        .sort_values(["Como data", "Como valor"], ascending=False)
-    )
-    st.dataframe(
-        diagnosis,
+        .sort_values(["Como data", "Como valor"], ascending=False),
         use_container_width=True,
-        column_config={
-            "Como data": st.column_config.ProgressColumn(
-                format="%.0f%%", min_value=0, max_value=1
-            ),
-            "Como valor": st.column_config.ProgressColumn(
-                format="%.0f%%", min_value=0, max_value=1
-            ),
-        },
+        column_config={"Como data": progress, "Como valor": progress},
     )
     st.info(
-        "Bases transacionais costumam ter a data em texto livre ou em colunas "
-        "de checkbox. Se a coluna certa aparece com percentual baixo, verifique "
-        "o formato das células na origem.",
+        "Extrações de BI costumam trazer a data em texto livre ou em colunas de "
+        "checkbox. Se a coluna certa aparece com percentual baixo, verifique o "
+        "formato das células na origem.",
         icon="💡",
     )
     with st.expander("Ver amostra do arquivo"):
@@ -376,17 +400,9 @@ def _render_kpis(series: CleanSeries, result: ForecastResult) -> None:
 
     columns = st.columns(4)
     with columns[0]:
-        kpi(
-            "Histórico",
-            f"{series.rows_out}",
-            f"{series.start:%b/%Y} → {series.end:%b/%Y}",
-        )
+        kpi("Histórico", f"{series.rows_out}", f"{series.start:%b/%Y} → {series.end:%b/%Y}")
     with columns[1]:
-        kpi(
-            "Acurácia do ajuste",
-            accuracy,
-            f"MAPE {_fmt(mape, 1)}% · {quality}",
-        )
+        kpi("Acurácia do ajuste", accuracy, f"MAPE {_fmt(mape, 1)}% · {quality}")
     with columns[2]:
         total = float(future["yhat"].sum()) if not future.empty else float("nan")
         kpi("Total projetado", _fmt(total), f"{result.horizon} período(s) à frente")
@@ -406,9 +422,7 @@ def _render_kpis(series: CleanSeries, result: ForecastResult) -> None:
 
 def _render_tables(result: ForecastResult, series: CleanSeries, value_col: str) -> None:
     section("Detalhamento", "Valores período a período")
-    tab_forecast, tab_full, tab_diag = st.tabs(
-        ["Projeção", "Série completa", "Diagnóstico"]
-    )
+    tab_forecast, tab_full, tab_diag = st.tabs(["Projeção", "Série completa", "Diagnóstico"])
 
     column_config = {
         "Período": st.column_config.DatetimeColumn(format="DD/MM/YYYY"),
@@ -425,8 +439,7 @@ def _render_tables(result: ForecastResult, series: CleanSeries, value_col: str) 
             }
         )
         st.dataframe(
-            future, use_container_width=True, hide_index=True,
-            column_config=column_config,
+            future, use_container_width=True, hide_index=True, column_config=column_config
         )
         st.download_button(
             "Baixar projeção (CSV)",
@@ -443,8 +456,13 @@ def _render_tables(result: ForecastResult, series: CleanSeries, value_col: str) 
             }
         )
         st.dataframe(
-            full, use_container_width=True, hide_index=True,
-            column_config={**column_config, "Real": st.column_config.NumberColumn(format="%.2f")},
+            full,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                **column_config,
+                "Real": st.column_config.NumberColumn(format="%.2f"),
+            },
         )
         st.download_button(
             "Baixar série completa (CSV)",

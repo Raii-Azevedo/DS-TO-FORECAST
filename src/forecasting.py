@@ -93,6 +93,23 @@ def _compute_metrics(actual: pd.Series, predicted: pd.Series) -> dict[str, float
 # --------------------------------------------------------------------------- #
 # Motor 3: fallback determinístico
 # --------------------------------------------------------------------------- #
+def _future_index(last: pd.Timestamp, freq: str, horizon: int) -> pd.DatetimeIndex:
+    """Gera exatamente ``horizon`` datas futuras a partir de ``last``.
+
+    `pd.date_range(..., inclusive="right")` devolve `horizon` ou `horizon + 1`
+    datas conforme a última data esteja ou não alinhada à frequência — uma série
+    mensal terminando em 15/03 produzia um array a mais que o de valores, e o
+    DataFrame estourava com "All arrays must be of the same length". Somar o
+    offset n vezes é determinístico, independente do alinhamento.
+    """
+    offset = pd.tseries.frequencies.to_offset(freq)
+    dates = pd.DatetimeIndex([last + offset * (step + 1) for step in range(horizon)])
+
+    if len(dates) != horizon:  # defesa: nunca deve acontecer
+        raise ValueError(f"Esperava {horizon} datas futuras, gerei {len(dates)}.")
+    return dates
+
+
 def _linear_forecast(series: CleanSeries, horizon: int) -> pd.DataFrame:
     """Tendência linear por mínimos quadrados + banda de erro empírica."""
     history = series.df
@@ -113,10 +130,7 @@ def _linear_forecast(series: CleanSeries, horizon: int) -> pd.DataFrame:
         residual_std = abs(float(np.mean(y))) * 0.05 or 1.0
     band = 1.28 * residual_std  # ~80% de cobertura
 
-    last = history["ds"].max()
-    future_dates = pd.date_range(
-        start=last, periods=horizon + 1, freq=series.freq, inclusive="right"
-    )
+    future_dates = _future_index(history["ds"].max(), series.freq, horizon)
 
     return pd.concat(
         [

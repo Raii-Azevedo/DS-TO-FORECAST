@@ -255,6 +255,86 @@ def test_css_survives_the_markdown_parser():
         assert not line.startswith("    "), "indentação viraria bloco de código"
 
 
+@pytest.mark.parametrize("freq", ["D", "W", "MS", "QS", "YS"])
+@pytest.mark.parametrize("day", [1, 15, 28])
+def test_future_index_length_with_unaligned_dates(freq, day):
+    """Regressão: 'All arrays must be of the same length' no fallback linear.
+
+    `date_range(inclusive="right")` devolvia horizon ou horizon+1 datas conforme
+    a última data estivesse alinhada à frequência, e o DataFrame estourava.
+    """
+    from src.forecasting import _future_index
+
+    last = pd.Timestamp(f"2024-03-{day:02d}")
+    index = _future_index(last, freq, 6)
+    assert len(index) == 6
+    assert index.is_monotonic_increasing
+    assert index[0] > last
+
+
+@pytest.mark.parametrize("points", [2, 3, 4, 5])
+def test_short_series_ending_midmonth_forecasts(points):
+    """A série que quebrou em produção: poucos pontos, terminando fora do dia 1."""
+    df = pd.DataFrame(
+        {
+            "Data": pd.date_range("2024-01-15", periods=points, freq="MS")
+            + pd.Timedelta(days=14),
+            "Valor": np.linspace(100, 200, points),
+        }
+    )
+    result = run_forecast(prepare_series(df, "Data", "Valor"), horizon=6)
+    assert len(result.future) == 6
+    assert np.isfinite(result.future["yhat"].to_numpy()).all()
+
+
+def test_sidebar_is_hidden():
+    """A interface fica toda na tela principal — a barra lateral é ocultada."""
+    from src.theme import _css
+
+    assert "stSidebar" in _css()
+    assert "display: none" in _css()
+
+
+def test_theme_has_no_dark_text_colors():
+    """Regressão: texto navy sobre fundo escuro ficava ilegível.
+
+    A aplicação roda sempre em tema escuro. Nenhuma cor de *texto* pode ser
+    escura — `navy` só é válido como fundo (no gradiente do cabeçalho).
+    """
+    import re
+
+    from src.config import BRAND
+    from src.theme import _css
+
+    css = _css()
+    dark = {BRAND.navy.lower(), BRAND.navy_soft.lower()}
+    for declaration in re.findall(r"color:\s*([^;!}]+)", css, flags=re.IGNORECASE):
+        value = declaration.strip().lower()
+        assert value not in dark, f"cor de texto escura no tema dark: {value}"
+        assert "--navy" not in value, "token --navy não deve pintar texto"
+
+
+def test_streamlit_theme_is_pinned_to_dark():
+    """O tema precisa estar fixo, senão o navegador pode impor o modo claro."""
+    import pathlib
+    import re
+
+    config = pathlib.Path(__file__).resolve().parents[1] / ".streamlit" / "config.toml"
+    assert config.exists(), "falta .streamlit/config.toml"
+
+    # Parse mínimo de `chave = "valor"` — evita depender de tomllib (Python 3.11+).
+    text = config.read_text(encoding="utf-8")
+    theme = dict(re.findall(r'^\s*(\w+)\s*=\s*"([^"]*)"', text, flags=re.MULTILINE))
+
+    assert theme["base"] == "dark"
+
+    from src.config import BRAND
+
+    assert theme["backgroundColor"].upper() == BRAND.canvas.upper()
+    assert theme["secondaryBackgroundColor"].upper() == BRAND.surface.upper()
+    assert theme["textColor"].upper() == BRAND.ink.upper()
+
+
 def test_metrics_handle_zero_values():
     df = pd.DataFrame(
         {

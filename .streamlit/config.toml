@@ -1,0 +1,19 @@
+# Tema fixo da aplicação.
+# `base = "dark"` impede que a preferência do navegador ou a configuração do
+# Streamlit Cloud alternem para o tema claro — sem isso, as superfícies escuras
+# definidas em src/theme.py ficam com texto claro sobre fundo claro na sidebar.
+# As cores aqui precisam acompanhar os tokens de src/config.py (classe Brand).
+
+[theme]
+base = "dark"
+primaryColor = "#FF5C8A"
+backgroundColor = "#0D0D1F"
+secondaryBackgroundColor = "#1A1A38"
+textColor = "#ECECF5"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+maxUploadSize = 200
