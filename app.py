@@ -14,11 +14,15 @@ import streamlit as st
 from src.charts import forecast_chart, residuals_chart
 from src.config import APP, FREQUENCIES, SETTINGS
 from src.data_loader import (
+    USABLE_THRESHOLD,
     DataLoadError,
     excel_sheet_names,
     load_dataframe,
+    profile_columns,
     suggest_date_column,
     suggest_value_column,
+    usable_date_columns,
+    usable_value_columns,
 )
 from src.forecasting import ForecastResult, run_forecast
 from src.preprocessing import CleanSeries, ValidationError, prepare_series
@@ -40,6 +44,11 @@ st.set_page_config(
 @st.cache_data(show_spinner=False)
 def _load(raw: bytes, filename: str, sheet: str | int) -> pd.DataFrame:
     return load_dataframe(raw, filename, sheet)
+
+
+@st.cache_data(show_spinner="Analisando as colunas...")
+def _profile(df: pd.DataFrame) -> pd.DataFrame:
+    return profile_columns(df)
 
 
 @st.cache_data(show_spinner=False)
@@ -112,16 +121,50 @@ def main() -> None:
         return
 
     # ---- Mapeamento de colunas ------------------------------------------- #
-    columns = list(data.columns)
+    profile = _profile(data)
+    date_options = usable_date_columns(profile)
+    value_options = usable_value_columns(profile)
+
+    if not date_options or not value_options:
+        _render_mapping_error(data, profile, date_options, value_options)
+        return
+
+    def _label(column: str, kind: str) -> str:
+        ratio = profile.loc[column, f"{kind}_ratio"]
+        return f"{column} · {ratio:.0%}"
+
     with st.sidebar:
         st.markdown("## Mapeamento")
-        date_col = st.selectbox(
-            "Coluna de data", columns,
-            index=columns.index(suggest_date_column(data)),
+        st.caption(
+            f"{len(date_options)} coluna(s) servem como data e "
+            f"{len(value_options)} como valor. O percentual indica quantas "
+            "linhas convertem corretamente."
         )
+        show_all = st.checkbox(
+            "Mostrar todas as colunas", value=False,
+            help="Por padrão só aparecem as colunas que realmente convertem.",
+        )
+
+        date_list = list(data.columns) if show_all else date_options
+        date_col = st.selectbox(
+            "Coluna de data", date_list,
+            index=date_list.index(suggest_date_column(data, profile))
+            if suggest_date_column(data, profile) in date_list else 0,
+            format_func=lambda c: _label(c, "date"),
+        )
+
+        remaining = usable_value_columns(profile, exclude=date_col)
+        value_list = (
+            [c for c in data.columns if c != date_col] if show_all else remaining
+        )
+        if not value_list:
+            st.error("Nenhuma coluna de valor sobrou. Escolha outra coluna de data.")
+            return
+        suggested = suggest_value_column(data, exclude=date_col, profile=profile)
         value_col = st.selectbox(
-            "Coluna de valor", columns,
-            index=columns.index(suggest_value_column(data, exclude=date_col)),
+            "Coluna de valor", value_list,
+            index=value_list.index(suggested) if suggested in value_list else 0,
+            format_func=lambda c: _label(c, "value"),
         )
         aggregation = st.selectbox(
             "Datas repetidas", ["sum", "mean", "median", "last", "max", "min"],
@@ -137,6 +180,7 @@ def main() -> None:
         series = _prepare(data, date_col, value_col, aggregation, None)
     except ValidationError as exc:
         st.error(f"**Dados inválidos para forecast.** {exc}")
+        _render_column_hints(profile, date_options, value_options)
         with st.expander("Ver amostra do arquivo"):
             st.dataframe(data.head(20), use_container_width=True)
         return

@@ -115,9 +115,17 @@ def load_dataframe(
 
 
 # --------------------------------------------------------------------------- #
-# Detecção automática de colunas
+# Perfilamento e detecção automática de colunas
 # --------------------------------------------------------------------------- #
+#: mínimo de linhas convertidas com sucesso para a coluna ser considerada usável
+USABLE_THRESHOLD = 0.60
+
+#: linhas amostradas no perfilamento — mantém a detecção rápida em bases grandes
+_PROFILE_SAMPLE = 3_000
+
+
 def _score(column: str, hints: tuple[str, ...]) -> int:
+    """Pontua o nome da coluna contra a lista de pistas (0 = nenhuma pista)."""
     name = column.strip().lower()
     for position, hint in enumerate(hints):
         if name == hint:
@@ -127,28 +135,88 @@ def _score(column: str, hints: tuple[str, ...]) -> int:
     return 0
 
 
-def suggest_date_column(df: pd.DataFrame) -> str:
-    """Melhor candidata a coluna de data: nome sugestivo ou maior taxa de parse."""
-    by_name = sorted(df.columns, key=lambda c: _score(c, DATE_HINTS), reverse=True)
-    if _score(by_name[0], DATE_HINTS) > 0:
-        return by_name[0]
+def profile_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Mede, por coluna, o quanto ela serve como data e como valor.
 
-    best, best_ratio = df.columns[0], -1.0
+    A checagem é feita sobre uma amostra e importa mais que o nome: uma coluna
+    chamada "Data Prevista" que na verdade guarda ``True``/``False`` recebe
+    ``date_ratio`` zero e deixa de ser sugerida.
+
+    Returns:
+        DataFrame indexado pelo nome da coluna, com ``date_ratio``,
+        ``value_ratio`` (0..1) e as pontuações de nome.
+    """
+    from .preprocessing import to_datetime, to_numeric  # import tardio: evita ciclo
+
+    sample = df.sample(min(len(df), _PROFILE_SAMPLE), random_state=0) if len(df) else df
+    rows = []
+
     for column in df.columns:
-        parsed = pd.to_datetime(df[column], errors="coerce", dayfirst=True)
-        ratio = float(parsed.notna().mean())
-        if ratio > best_ratio:
-            best, best_ratio = column, ratio
-    return best
+        values = sample[column]
+        non_null = values.notna()
+        base = int(non_null.sum())
+
+        if base == 0 or pd.api.types.is_bool_dtype(values):
+            # Coluna vazia ou booleana (checkbox) não serve para nada aqui.
+            date_ratio = value_ratio = 0.0
+        else:
+            date_ratio = float(to_datetime(values).notna().sum()) / base
+            value_ratio = float(to_numeric(values).notna().sum()) / base
+
+        rows.append(
+            {
+                "column": column,
+                "date_ratio": round(date_ratio, 4),
+                "value_ratio": round(value_ratio, 4),
+                "date_name_score": _score(column, DATE_HINTS),
+                "value_name_score": _score(column, VALUE_HINTS),
+            }
+        )
+
+    return pd.DataFrame(rows).set_index("column")
 
 
-def suggest_value_column(df: pd.DataFrame, exclude: str | None = None) -> str:
-    """Melhor candidata a coluna de valores: nome sugestivo ou coluna numérica."""
-    candidates = [c for c in df.columns if c != exclude] or list(df.columns)
+def usable_date_columns(profile: pd.DataFrame) -> list[str]:
+    """Colunas que realmente convertem em data, da melhor para a pior."""
+    usable = profile[profile["date_ratio"] >= USABLE_THRESHOLD]
+    ordered = usable.sort_values(
+        ["date_name_score", "date_ratio"], ascending=[False, False]
+    )
+    return list(ordered.index)
 
-    by_name = sorted(candidates, key=lambda c: _score(c, VALUE_HINTS), reverse=True)
-    if _score(by_name[0], VALUE_HINTS) > 0:
-        return by_name[0]
 
-    numeric = [c for c in candidates if pd.api.types.is_numeric_dtype(df[c])]
-    return numeric[0] if numeric else candidates[0]
+def usable_value_columns(profile: pd.DataFrame, exclude: str | None = None) -> list[str]:
+    """Colunas que realmente convertem em número, da melhor para a pior."""
+    usable = profile[profile["value_ratio"] >= USABLE_THRESHOLD]
+    if exclude is not None:
+        usable = usable.drop(index=exclude, errors="ignore")
+    ordered = usable.sort_values(
+        ["value_name_score", "value_ratio"], ascending=[False, False]
+    )
+    return list(ordered.index)
+
+
+def suggest_date_column(df: pd.DataFrame, profile: pd.DataFrame | None = None) -> str:
+    """Melhor candidata a coluna de data; cai na primeira coluna se nenhuma servir."""
+    profile = profile_columns(df) if profile is None else profile
+    candidates = usable_date_columns(profile)
+    if candidates:
+        return candidates[0]
+    return str(profile["date_ratio"].idxmax()) if len(profile) else str(df.columns[0])
+
+
+def suggest_value_column(
+    df: pd.DataFrame,
+    exclude: str | None = None,
+    profile: pd.DataFrame | None = None,
+) -> str:
+    """Melhor candidata a coluna de valores; cai na mais numérica se nenhuma servir."""
+    profile = profile_columns(df) if profile is None else profile
+    candidates = usable_value_columns(profile, exclude=exclude)
+    if candidates:
+        return candidates[0]
+
+    fallback = profile.drop(index=exclude, errors="ignore") if exclude else profile
+    if len(fallback):
+        return str(fallback["value_ratio"].idxmax())
+    return str(df.columns[0])
