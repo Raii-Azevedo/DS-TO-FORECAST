@@ -1,131 +1,125 @@
+# P&L Forecast
 
-# Aplicação de Previsão P&L usando Prophet
+Aplicação Streamlit para previsão de séries financeiras (P&L) a partir de um arquivo
+CSV ou Excel, usando **Prophet** com fallback determinístico.
 
-Este repositório contém um código para realizar análises preditivas de P&L (Profit and Loss) utilizando a biblioteca Prophet. O objetivo é gerar previsões a partir de dados históricos fornecidos pelo usuário e apresentar os resultados de forma visual e interativa com Streamlit.
-
-## Objetivo
-A aplicação permite:
-
-1. Fazer upload de um arquivo contendo dados históricos (em formatos `.csv` ou `.xlsx`).
-2. Gerar previsões de valores futuros com base nos dados carregados.
-3. Visualizar as previsões em gráficos interativos e tabelas estilizadas.
+Carregue a base, confirme as colunas de data e valor, escolha o horizonte e receba
+a projeção com intervalo de confiança, métricas de qualidade e exportação em CSV.
 
 ---
 
-## Fluxo do Código
+## Instalação
 
-### 1. **Upload do Arquivo**
-O usuário pode fazer upload de arquivos `.csv` ou `.xlsx`. O código valida o formato e carrega os dados para análise.
-
-- Exemplo de arquivo de entrada esperado:
-
-```
-| Data       | Valor |
-|------------|-------|
-| 01/01/2023 | 100   |
-| 01/02/2023 | 150   |
-| 01/03/2023 | 200   |
+```bash
+python -m venv streamlitenv
+source streamlitenv/bin/activate      # Windows: streamlitenv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-### 2. **Configuração do Forecast**
-- O código permite ao usuário selecionar as colunas correspondentes à data e aos valores.
-- Os dados históricos são preparados para o Prophet:
-  - A coluna de data é renomeada para `ds`.
-  - A coluna de valores é renomeada para `y`.
-
-### 3. **Modelo Prophet**
-- O Prophet é treinado com os dados históricos para gerar previsões.
-- O modelo calcula valores de previsão (`yhat`) e intervalos de confiança (`yhat_upper` e `yhat_lower`).
-
-### 4. **Preenchimento de Valores**
-- Caso já existam valores históricos para certas datas, eles são mantidos.
-- O forecast é realizado apenas para datas futuras ou lacunas nos dados.
-
-### 5. **Gráficos e Tabelas**
-- **Gráfico de Linhas:** Mostra os dados históricos, previsões e intervalos de confiança.
-- **Tabela Estilizada:** Apresenta os valores previstos com destaque visual.
+Python 3.9+.
 
 ---
 
-## Estrutura do Código
+## Formato de entrada
 
-### Importação de Bibliotecas
-O código utiliza:
-- `streamlit` para criar a interface web.
-- `pandas` para manipulação de dados.
-- `prophet` para o modelo de previsão.
-- `plotly` para visualização interativa.
+Basta uma coluna de data e uma de valor — nome e ordem são livres, a detecção é
+automática.
 
-### Fluxo Principal
-1. **Carregamento de Dados**
-   ```python
-   if uploaded_file:
-       if uploaded_file.name.endswith('.csv'):
-           data = pd.read_csv(uploaded_file)
-       elif uploaded_file.name.endswith(('.xlsx', '.xls')):
-           data = pd.read_excel(uploaded_file)
-   ```
+| Data       | Valor        |
+|------------|--------------|
+| 01/01/2025 | R$ 120.000,00|
+| 01/02/2025 | 138.500,50   |
+| 01/03/2025 | 141.200,75   |
 
-2. **Configuração e Treinamento do Modelo**
-   ```python
-   forecast_data = data[[date_column, value_column]].rename(
-       columns={date_column: "ds", value_column: "y"}
-   )
-   model = Prophet()
-   model.fit(forecast_data)
-   ```
+A camada de saneamento aceita, sem intervenção manual:
 
-3. **Preenchimento de Valores**
-   ```python
-   forecast['y_forecast'] = forecast.apply(
-       lambda row: row['y'] if row['ds'] <= last_date else row['yhat'], axis=1
-   )
-   ```
+- formato brasileiro (`1.234,56`) e americano (`1,234.56`);
+- símbolos de moeda e percentual (`R$`, `€`, `%`);
+- negativos contábeis entre parênteses — `(1.234,56)` vira `-1234.56`;
+- tokens de vazio: `N/A`, `-`, `#DIV/0!`, `#REF!`, células em branco;
+- datas em `DD/MM/AAAA` ou `AAAA-MM-DD`, com ou sem timezone;
+- datas repetidas, consolidadas pelo critério escolhido (soma, média, último…);
+- CSV com separador `,` ou `;` e encoding UTF-8 ou Latin-1.
 
-4. **Gráficos**
-   - Histórico: linha azul contínua.
-   - Previsão: linha verde com intervalos de confiança.
-
-5. **Tabela de Resultados**
-   ```python
-   st.dataframe(
-       forecast_table.style.apply(color_forecast, axis=0).format("{:.2f}")
-   )
-   ```
+Linhas irrecuperáveis são descartadas e reportadas na aba **Diagnóstico**.
 
 ---
 
-## Como Usar
+## Arquitetura
 
-### Pré-requisitos
-- Python 3.8+
-- Dependências listadas no arquivo `requirements.txt`:
+```
+app.py                 Interface Streamlit (apenas UI e orquestração)
+src/
+  config.py            Paleta Artefact, limites do modelo, frequências
+  data_loader.py       Leitura CSV/Excel + detecção automática de colunas
+  preprocessing.py     Coerção de tipos, limpeza, deduplicação, validação
+  forecasting.py       Prophet em cascata + métricas
+  charts.py            Gráficos Plotly com a paleta da marca
+  theme.py             CSS e componentes visuais
+tests/
+  test_pipeline.py     26 testes do pipeline (pytest)
+```
 
-  ```
-  streamlit
-  pandas
-  prophet
-  plotly
-  ```
-
-### Passos
-1. Instale as dependências com:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Execute o aplicativo:
-   ```bash
-   streamlit run app.py
-   ```
-3. Faça o upload do arquivo de dados e visualize os resultados.
+A separação isola a lógica de negócio da UI: `src/` não importa `streamlit`, o que
+torna o pipeline testável fora do navegador e reaproveitável em um job batch.
 
 ---
 
-## Observações
-- O código assume que as datas no arquivo de entrada estão no formato `DD/MM/AAAA`.
-- Certifique-se de que o arquivo de entrada contém uma coluna de datas e uma de valores.
+## Robustez do modelo
+
+O erro original em produção era a falha de inicialização do Stan:
+
+```
+Exception: normal_lpdf: Random variable is nan, but must be not nan!
+Initialization between (-2, 2) failed after 1 attempts.
+```
+
+Ele ocorre quando a coluna `y` chega ao `model.fit()` com `NaN`, infinito ou
+tipo texto — o código anterior renomeava as colunas e chamava `fit()` sem nenhuma
+coerção numérica. Duas camadas resolvem isso:
+
+**1. Saneamento (`preprocessing.py`)** — a série é convertida para `float64`,
+valores não finitos são removidos, datas duplicadas agregadas e a série ordenada.
+Uma verificação `np.isfinite` roda como última barreira antes do modelo. Problemas
+estruturais (série vazia, coluna errada, pontos insuficientes) viram `ValidationError`
+com mensagem em português, não um crash.
+
+**2. Cascata de motores (`forecasting.py`)** — se um nível falha, o próximo assume:
+
+| Nível | Motor | Quando entra |
+|-------|-------|--------------|
+| 1 | Prophet com a configuração escolhida | caso normal |
+| 2 | Prophet simplificado (sem sazonalidade, growth linear) | o nível 1 não converge |
+| 3 | Tendência linear (OLS) com banda empírica | série < 6 pontos, ou o nível 2 falha |
+
+O usuário sempre recebe uma projeção, e o motor efetivamente usado aparece na tela.
+Outras proteções: horizonte limitado a 36 períodos, frequência inferida dos dados
+(em vez de fixada em mensal), MAPE que ignora zeros no denominador, e
+`interval_width` explícito de 80%.
 
 ---
 
-## Author
-Raíssa Azevedo
+## Métricas
+
+A aba **Diagnóstico** traz MAPE, MAE, RMSE e R² sobre o período histórico, mais o
+gráfico de resíduos. Leitura sugerida do MAPE: abaixo de 10% excelente, até 20%
+boa, até 35% razoável — acima disso, revise a base antes de usar a projeção.
+
+---
+
+## Testes
+
+```bash
+pytest -q
+```
+
+Cobrem conversão numérica, limpeza, inferência de frequência e forecast em casos
+adversos: séries com NaN, valores em texto, constantes, com zeros, com dois pontos,
+com datas irregulares e com horizonte fora do limite.
+
+---
+
+## Autora
+
+Raíssa Azevedo · Artefact
