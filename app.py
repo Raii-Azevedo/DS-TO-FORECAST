@@ -1,4 +1,8 @@
-"""P&L Forecast — aplicação Streamlit de previsão de séries financeiras.
+"""Dataset to Forecast — aplicação Streamlit de projeção de séries temporais.
+
+Recebe qualquer dataset com uma coluna de data e uma de valor e devolve a
+projeção dos próximos períodos. O domínio dos dados é indiferente: vendas,
+volume, headcount, consumo, tempo de resposta ou qualquer outra métrica.
 
 Execução:
     streamlit run app.py
@@ -263,6 +267,88 @@ def _welcome() -> None:
             use_container_width=True,
             hide_index=True,
         )
+
+
+def _render_column_hints(
+    profile: pd.DataFrame,
+    date_options: list[str],
+    value_options: list[str],
+) -> None:
+    """Mostra quais colunas do arquivo servem como data e como valor."""
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Colunas que servem como data**")
+        st.dataframe(
+            profile.loc[date_options, ["date_ratio"]]
+            .rename(columns={"date_ratio": "Conversão"})
+            .head(10)
+            if date_options
+            else pd.DataFrame({"Conversão": []}),
+            use_container_width=True,
+            column_config={"Conversão": st.column_config.ProgressColumn(
+                format="%.0f%%", min_value=0, max_value=1
+            )},
+        )
+    with right:
+        st.markdown("**Colunas que servem como valor**")
+        st.dataframe(
+            profile.loc[value_options, ["value_ratio"]]
+            .rename(columns={"value_ratio": "Conversão"})
+            .head(10)
+            if value_options
+            else pd.DataFrame({"Conversão": []}),
+            use_container_width=True,
+            column_config={"Conversão": st.column_config.ProgressColumn(
+                format="%.0f%%", min_value=0, max_value=1
+            )},
+        )
+
+
+def _render_mapping_error(
+    data: pd.DataFrame,
+    profile: pd.DataFrame,
+    date_options: list[str],
+    value_options: list[str],
+) -> None:
+    """Tela exibida quando o arquivo não tem colunas utilizáveis."""
+    missing = []
+    if not date_options:
+        missing.append("uma coluna de **data**")
+    if not value_options:
+        missing.append("uma coluna de **valor numérico**")
+
+    st.error(
+        f"Não encontrei {' nem '.join(missing)} nesta base. "
+        f"Uma coluna é considerada utilizável quando pelo menos "
+        f"{USABLE_THRESHOLD:.0%} das linhas convertem corretamente."
+    )
+
+    section("Diagnóstico das colunas", "O que cada coluna do arquivo contém")
+    diagnosis = (
+        profile[["date_ratio", "value_ratio"]]
+        .rename(columns={"date_ratio": "Como data", "value_ratio": "Como valor"})
+        .sort_values(["Como data", "Como valor"], ascending=False)
+    )
+    st.dataframe(
+        diagnosis,
+        use_container_width=True,
+        column_config={
+            "Como data": st.column_config.ProgressColumn(
+                format="%.0f%%", min_value=0, max_value=1
+            ),
+            "Como valor": st.column_config.ProgressColumn(
+                format="%.0f%%", min_value=0, max_value=1
+            ),
+        },
+    )
+    st.info(
+        "Bases transacionais costumam ter a data em texto livre ou em colunas "
+        "de checkbox. Se a coluna certa aparece com percentual baixo, verifique "
+        "o formato das células na origem.",
+        icon="💡",
+    )
+    with st.expander("Ver amostra do arquivo"):
+        st.dataframe(data.head(20), use_container_width=True)
 
 
 def _render_quality(series: CleanSeries, result: ForecastResult) -> None:

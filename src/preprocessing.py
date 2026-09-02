@@ -13,6 +13,7 @@ crash do modelo.
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -56,7 +57,11 @@ class CleanSeries:
 # Conversão numérica tolerante
 # --------------------------------------------------------------------------- #
 _CURRENCY_NOISE = re.compile(r"[R$€£¥%\s ]", re.IGNORECASE)
-_NON_NUMERIC = re.compile(r"[^0-9,.\-+eE]")
+
+#: forma de um número completo — a string precisa casar por inteiro. Letras não
+#: são removidas: se fossem, códigos como "BU02" ou "BR014074" virariam números.
+_NUMERIC_SHAPE = re.compile(r"^[+-]?[0-9][0-9.,]*(?:[eE][+-]?[0-9]+)?$")
+
 _NULL_TOKENS = {
     "", "-", "--", "n/a", "na", "nan", "none", "null", "nd", "n.d.",
     "#n/a", "#div/0!", "#value!", "#ref!", "sem dados", "s/d",
@@ -85,8 +90,8 @@ def _parse_number(token: object) -> float:
         text = text[1:-1]
 
     text = _CURRENCY_NOISE.sub("", text)
-    text = _NON_NUMERIC.sub("", text)
-    if not text or text in {"-", "+", ".", ","}:
+    if not _NUMERIC_SHAPE.match(text):
+        # Sobrou letra ou símbolo: é um código ("BU02", "BR014074"), não um número.
         return np.nan
 
     has_comma, has_dot = "," in text, "." in text
@@ -115,7 +120,15 @@ def _parse_number(token: object) -> float:
 
 
 def to_numeric(series: pd.Series) -> pd.Series:
-    """Coerção numérica de uma coluna inteira, sem levantar exceção."""
+    """Coerção numérica de uma coluna inteira, sem levantar exceção.
+
+    Datas e booleanos são rejeitados de propósito: `pd.to_numeric` converteria
+    um datetime em nanossegundos desde 1970, fazendo uma coluna de data passar
+    por métrica na detecção automática.
+    """
+    if pd.api.types.is_datetime64_any_dtype(series) or pd.api.types.is_bool_dtype(series):
+        return pd.Series(np.nan, index=series.index, dtype="float64")
+
     if pd.api.types.is_numeric_dtype(series):
         numeric = pd.to_numeric(series, errors="coerce")
     else:
@@ -128,15 +141,41 @@ def to_numeric(series: pd.Series) -> pd.Series:
 
 
 def to_datetime(series: pd.Series) -> pd.Series:
-    """Conversão de datas tolerante, com preferência por dia/mês/ano."""
+    """Conversão de datas tolerante, com preferência por dia/mês/ano.
+
+    Colunas puramente numéricas só são aceitas no formato compacto AAAAMMDD ou
+    AAAAMM. Sem essa trava, o pandas leria um identificador como `324850` como
+    epoch em nanossegundos e produziria uma data de 1970 — um ID de pedido
+    viraria silenciosamente uma coluna de datas.
+    """
     if pd.api.types.is_datetime64_any_dtype(series):
         return pd.to_datetime(series, errors="coerce")
 
-    parsed = pd.to_datetime(series, errors="coerce", dayfirst=True)
-    if parsed.notna().mean() < 0.5:
-        alternative = pd.to_datetime(series, errors="coerce", dayfirst=False)
-        if alternative.notna().mean() > parsed.notna().mean():
-            parsed = alternative
+    if pd.api.types.is_bool_dtype(series):
+        return pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+
+    if pd.api.types.is_numeric_dtype(series):
+        numbers = pd.to_numeric(series, errors="coerce")
+        compact = numbers.dropna()
+        if compact.empty:
+            return pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+
+        as_int = compact.astype("int64").astype(str)
+        if as_int.str.len().eq(8).all():
+            return pd.to_datetime(numbers, format="%Y%m%d", errors="coerce")
+        if as_int.str.len().eq(6).all():
+            return pd.to_datetime(numbers, format="%Y%m", errors="coerce")
+        return pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+
+    with warnings.catch_warnings():
+        # O pandas avisa quando cai no dateutil por não inferir um formato único.
+        # É o comportamento desejado aqui: a base pode misturar formatos.
+        warnings.simplefilter("ignore", UserWarning)
+        parsed = pd.to_datetime(series, errors="coerce", dayfirst=True)
+        if parsed.notna().mean() < 0.5:
+            alternative = pd.to_datetime(series, errors="coerce", dayfirst=False)
+            if alternative.notna().mean() > parsed.notna().mean():
+                parsed = alternative
 
     # Remove timezone: o Prophet só aceita datetimes naive.
     if getattr(parsed.dtype, "tz", None) is not None:

@@ -1,10 +1,15 @@
-# P&L Forecast
+# Dataset to Forecast
 
-Aplicação Streamlit para previsão de séries financeiras (P&L) a partir de um arquivo
-CSV ou Excel, usando **Prophet** com fallback determinístico.
+Aplicação Streamlit que transforma qualquer dataset em uma projeção de série
+temporal, usando **Prophet** com fallback determinístico.
 
-Carregue a base, confirme as colunas de data e valor, escolha o horizonte e receba
-a projeção com intervalo de confiança, métricas de qualidade e exportação em CSV.
+Carregue um CSV ou Excel, confirme as colunas de data e valor, escolha o horizonte
+e receba a projeção com intervalo de confiança, métricas de qualidade e exportação
+em CSV.
+
+O domínio dos dados é indiferente — a única exigência é uma coluna de data e uma de
+valor numérico. Serve igualmente para vendas, volume de pedidos, headcount, consumo,
+tempo de resposta, tráfego ou qualquer outra métrica com histórico.
 
 ---
 
@@ -97,6 +102,42 @@ O usuário sempre recebe uma projeção, e o motor efetivamente usado aparece na
 Outras proteções: horizonte limitado a 36 períodos, frequência inferida dos dados
 (em vez de fixada em mensal), MAPE que ignora zeros no denominador, e
 `interval_width` explícito de 80%.
+
+---
+
+## Detecção de colunas
+
+Bases de BI costumam ter dezenas de colunas, e a maioria não serve para forecast.
+Cada coluna é perfilada sobre uma amostra: mede-se quantas linhas convertem
+efetivamente em data e quantas em número. Só as que passam de 60% são oferecidas
+no seletor, com o percentual ao lado do nome.
+
+Isso descarta armadilhas comuns de extração:
+
+- colunas de **checkbox** (`True`/`False`), que não são datas;
+- **identificadores inteiros** — sem a trava, `324850` viraria uma data de 1970,
+  interpretado como epoch em nanossegundos;
+- **códigos alfanuméricos** como `BU02` ou `BR014074`, que não podem virar 2 e
+  14074 ao se removerem as letras;
+- colunas de **data lidas como métrica** via nanossegundos.
+
+Colunas cujo nome sugere identificador (`Cd `, `Id `, `Cód`, `Nr `) continuam
+disponíveis, mas são despriorizadas na sugestão automática. Se nenhuma coluna
+servir, a aplicação mostra o diagnóstico completo em vez de uma mensagem genérica.
+
+---
+
+## Nota sobre CSS no Streamlit
+
+O `st.markdown` passa por um parser CommonMark antes de renderizar HTML, e duas
+armadilhas fazem a folha de estilo aparecer como texto na tela: linhas indentadas
+com 4+ espaços viram bloco de código, e uma linha em branco encerra o bloco HTML.
+Por isso `theme.py` monta o CSS sem indentação e sem linhas em branco, e importa a
+fonte com `@import` dentro do próprio `<style>`. Há um teste que protege isso.
+
+O `requirements.txt` deve ficar em **UTF-8**. `pip freeze > requirements.txt` no
+PowerShell grava em UTF-16, e o pip só consegue ler esse encoding quando o BOM
+está presente — sem ele, o deploy falha antes de o app subir.
 
 ---
 

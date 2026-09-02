@@ -12,6 +12,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.data_loader import (
+    profile_columns,
+    suggest_date_column,
+    suggest_value_column,
+    usable_date_columns,
+)
 from src.forecasting import run_forecast
 from src.preprocessing import (
     ValidationError,
@@ -156,6 +162,97 @@ def test_forecast_horizon_is_capped():
     )
     result = run_forecast(prepare_series(df, "Data", "Valor"), horizon=999)
     assert result.horizon <= 36
+
+
+# --------------------------------------------------------------------------- #
+# Detecção de colunas em base transacional larga
+# --------------------------------------------------------------------------- #
+def _wide_frame(n: int = 800) -> pd.DataFrame:
+    """Imita uma extração de BI: códigos, checkbox, IDs e valores em texto BR."""
+    rs = np.random.RandomState(7)
+    return pd.DataFrame(
+        {
+            "[fn] Usuario": ["jose@exemplo.com"] * n,
+            "CC Filtro Prevista Entrega": rs.choice([True, False], n),
+            "Cd Business Unit": ["BU02"] * n,
+            "Cd Centro Distribuicao": [f"BR0140{i % 99:02d}" for i in range(n)],
+            "Cd Item Oc Pedido": rs.randint(1000, 400000, n),
+            "Dt Prevista Entrega": pd.to_datetime("2024-01-01")
+            + pd.to_timedelta(rs.randint(0, 400, n), "D"),
+            "Data Faturamento": (
+                pd.to_datetime("2024-01-01") + pd.to_timedelta(rs.randint(0, 400, n), "D")
+            ).strftime("%d/%m/%Y"),
+            # formato brasileiro: "R$ 12.345,50"
+            "Pedido Faturado": [
+                "R$ " + f"{v:,.2f}".replace(",", "§").replace(".", ",").replace("§", ".")
+                for v in rs.randint(500, 90000, n)
+            ],
+            "Observacao": [None] * n,
+        }
+    )
+
+
+@pytest.mark.parametrize("code", ["BU02", "BR014074", "jose@exemplo.com", "SP-01"])
+def test_codes_never_become_numbers(code):
+    """Regressão: códigos alfanuméricos viravam número ao remover as letras."""
+    assert pd.isna(_parse_number(code))
+
+
+def test_boolean_column_is_not_a_date():
+    """Regressão: uma coluna de checkbox era sugerida como coluna de data."""
+    profile = profile_columns(_wide_frame())
+    assert profile.loc["CC Filtro Prevista Entrega", "date_ratio"] == 0.0
+    assert "CC Filtro Prevista Entrega" not in usable_date_columns(profile)
+
+
+def test_id_column_is_not_a_date():
+    """Regressão: um ID inteiro era lido como epoch em nanossegundos."""
+    profile = profile_columns(_wide_frame())
+    assert profile.loc["Cd Item Oc Pedido", "date_ratio"] == 0.0
+
+
+def test_datetime_column_is_not_a_metric():
+    """Regressão: uma coluna de data virava métrica via nanossegundos."""
+    profile = profile_columns(_wide_frame())
+    assert profile.loc["Dt Prevista Entrega", "value_ratio"] == 0.0
+
+
+def test_suggestion_picks_the_business_columns():
+    df = _wide_frame()
+    profile = profile_columns(df)
+    date_col = suggest_date_column(df, profile)
+    value_col = suggest_value_column(df, exclude=date_col, profile=profile)
+    assert date_col == "Data Faturamento"
+    assert value_col == "Pedido Faturado"
+
+
+def test_wide_frame_produces_a_forecast():
+    df = _wide_frame()
+    profile = profile_columns(df)
+    date_col = suggest_date_column(df, profile)
+    value_col = suggest_value_column(df, exclude=date_col, profile=profile)
+    result = run_forecast(prepare_series(df, date_col, value_col, aggregation="sum"), horizon=6)
+    assert len(result.future) == 6
+    assert np.isfinite(result.future["yhat"].to_numpy()).all()
+
+
+# --------------------------------------------------------------------------- #
+# CSS injetado no Streamlit
+# --------------------------------------------------------------------------- #
+def test_css_survives_the_markdown_parser():
+    """Regressão: o CSS aparecia como texto na tela.
+
+    O Streamlit passa `st.markdown` por um parser CommonMark. Linhas indentadas
+    com 4+ espaços viram bloco de código e uma linha em branco encerra o bloco
+    HTML — nos dois casos a folha de estilo vaza como texto visível.
+    """
+    from src.theme import _css
+
+    css = _css()
+    assert css.startswith("<style>") and css.rstrip().endswith("</style>")
+    for line in css.splitlines():
+        assert line.strip(), "linha em branco encerraria o bloco HTML"
+        assert not line.startswith("    "), "indentação viraria bloco de código"
 
 
 def test_metrics_handle_zero_values():

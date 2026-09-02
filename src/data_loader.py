@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import APP, DATE_HINTS, VALUE_HINTS
+from .config import APP, DATE_HINTS, ID_HINTS, VALUE_HINTS
 
 
 class DataLoadError(Exception):
@@ -163,13 +163,17 @@ def profile_columns(df: pd.DataFrame) -> pd.DataFrame:
             date_ratio = float(to_datetime(values).notna().sum()) / base
             value_ratio = float(to_numeric(values).notna().sum()) / base
 
+        # Um identificador é numérico, mas não é uma métrica: despriorizado.
+        looks_like_id = _score(f" {column.lower()} ", ID_HINTS) > 0
+        value_score = _score(column, VALUE_HINTS) - (60 if looks_like_id else 0)
+
         rows.append(
             {
                 "column": column,
                 "date_ratio": round(date_ratio, 4),
                 "value_ratio": round(value_ratio, 4),
                 "date_name_score": _score(column, DATE_HINTS),
-                "value_name_score": _score(column, VALUE_HINTS),
+                "value_name_score": value_score,
             }
         )
 

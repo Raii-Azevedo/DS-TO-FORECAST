@@ -68,13 +68,22 @@ DATE_HINTS: tuple[str, ...] = (
 VALUE_HINTS: tuple[str, ...] = (
     "valor", "value", "receita", "revenue", "custo", "cost", "margem",
     "margin", "gm", "ebitda", "total", "amount", "y", "vendas", "sales",
+    "faturado", "faturamento", "preco", "preço", "price", "quantidade",
+    "qtd", "qty", "volume",
+)
+
+#: pistas de identificador — colunas assim são numéricas mas não são métricas,
+#: então são despriorizadas na sugestão automática de coluna de valor.
+ID_HINTS: tuple[str, ...] = (
+    "cd ", "cd_", "id ", "id_", "cod", "código", "codigo", "nr ", "nr_",
+    "num ", "chave", "key", "matricula", "matrícula", "cnpj", "cpf",
 )
 
 
 @dataclass(frozen=True)
 class AppInfo:
-    title: str = "P&L Forecast"
-    subtitle: str = "Análise preditiva de P&L com Prophet"
+    title: str = "Dataset to Forecast"
+    subtitle: str = "Projeção de séries temporais a partir do seu dataset"
     owner: str = "Artefact"
     max_preview_rows: int = 200
     supported_extensions: tuple[str, ...] = field(
